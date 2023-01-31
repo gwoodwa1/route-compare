@@ -23,9 +23,10 @@ type RouteTable struct {
 						Text    string `xml:",chardata"`
 						Seconds string `xml:"seconds,attr"`
 					} `xml:"age"`
-					Nh struct {
+					Nh []struct {
 						Text             string `xml:",chardata"`
 						SelectedNextHop  string `xml:"selected-next-hop"`
+						To               string `xml:"to"`
 						Via              string `xml:"via"`
 						NhLocalInterface string `xml:"nh-local-interface"`
 					} `xml:"nh"`
@@ -52,22 +53,32 @@ func parseXMLFile(fileName string) (*RouteTable, error) {
 }
 
 func getRtDestinationEntries(reply *RouteTable, routinginstance []string) []RtDestination {
-	var entries []RtDestination
-	for _, routeTable := range reply.RouteInformation.RouteTable {
-		tableName := routeTable.TableName
-		if !contains(routinginstance, "ALL") && !contains(routinginstance, tableName) {
-			continue
-		}
-		for _, rt := range routeTable.Rt {
-			entries = append(entries, RtDestination{
-				Destination: rt.RtDestination,
-				NextHop:     rt.RtEntry.Nh.Via,
-				TableName:   tableName,
-			})
-		}
-	}
-	return entries
+    var entries []RtDestination
+    for _, routeTable := range reply.RouteInformation.RouteTable {
+        tableName := routeTable.TableName
+        if !contains(routinginstance, "ALL") && !contains(routinginstance, tableName) {
+            continue
+        }
+        for _, rt := range routeTable.Rt {
+            var nextHops []string
+            for _, nh := range rt.RtEntry.Nh {
+                nextHops = append(nextHops, nh.To)
+		            }
+			var via []string
+            for _, nh := range rt.RtEntry.Nh {
+                via = append(via, nh.Via)
+			}			
+				entries = append(entries, RtDestination{
+                Destination: rt.RtDestination,
+                NextHop:     nextHops,
+				Via: via,
+                TableName:   tableName,
+            })
+        }
+    }
+    return entries
 }
+
 
 func contains(s []string, e string) bool {
 	for _, a := range s {
@@ -80,8 +91,21 @@ func contains(s []string, e string) bool {
 
 type RtDestination struct {
 	Destination string
-	NextHop     string
+	NextHop     []string
+	Via         []string
 	TableName   string
+}
+
+func isSameSlice(a, b []string) bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i, v := range a {
+        if v != b[i] {
+            return false
+        }
+    }
+    return true
 }
 
 func main() {
@@ -123,19 +147,18 @@ func main() {
 	postDestinations := getRtDestinationEntries(postRpcReply,routinginstance)
 	
 	pretable := tablewriter.NewWriter(os.Stdout)
-	pretable.SetHeader([]string{"Destination", "NextHop","Routing-Instance"})
+	pretable.SetHeader([]string{"Destination", "NextHop","Via","Routing-Instance"})
 
 	for _, preDest := range preDestinations {
 		found := false
 		for _, postDest := range postDestinations {
-			if preDest.Destination == postDest.Destination && preDest.NextHop == postDest.NextHop {
+			if preDest.Destination == postDest.Destination && isSameSlice(preDest.NextHop, postDest.NextHop) && isSameSlice(preDest.Via, postDest.Via){
 				found = true
 				break
 			}
 		}
 		if !found {
-			//fmt.Println("Destination", preDest.Destination, "with NextHop info", preDest.NextHop, "not found in post XML file.")
-			pretable.Append([]string{fmt.Sprintf("%v", preDest.Destination), fmt.Sprintf("%v", preDest.NextHop), fmt.Sprintf("%v", preDest.TableName)})
+			pretable.Append([]string{fmt.Sprintf("%v", preDest.Destination), fmt.Sprintf("%v", preDest.NextHop),fmt.Sprintf("%v", preDest.Via), fmt.Sprintf("%v", preDest.TableName)})
             
 		}
 		
@@ -147,18 +170,18 @@ func main() {
 	}
 	
 	posttable := tablewriter.NewWriter(os.Stdout)
-	posttable.SetHeader([]string{"Destination", "NextHop","Routing-Instance"})
+	posttable.SetHeader([]string{"Destination", "NextHop","Via","Routing-Instance"})
 	
 	for _, postDest := range postDestinations {
 		found := false
 		for _, preDest := range preDestinations {
-			if postDest.Destination == preDest.Destination && postDest.NextHop == preDest.NextHop {
+			if postDest.Destination == preDest.Destination && isSameSlice(postDest.NextHop,preDest.NextHop) && isSameSlice(postDest.Via,preDest.Via) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			posttable.Append([]string{fmt.Sprintf("%v", postDest.Destination), fmt.Sprintf("%v", postDest.NextHop), fmt.Sprintf("%v", postDest.TableName)})
+			posttable.Append([]string{fmt.Sprintf("%v", postDest.Destination), fmt.Sprintf("%v", postDest.NextHop),fmt.Sprintf("%v", postDest.Via), fmt.Sprintf("%v", postDest.TableName)})
 		}
 	}
 	if posttable != nil{
