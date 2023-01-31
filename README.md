@@ -9,5 +9,6 @@ or specify an indivdual routing instance.
 
 Results are displayed in a table via the Terminal
 
-![Screenshot from 2023-01-30 13-00-51](https://user-images.githubusercontent.com/63735312/215485142-de005d96-649e-4110-b8b7-019dccc77a4d.png)
 
+
+![Screenshot from 2023-01-31 06-52-17](https://user-images.githubusercontent.com/63735312/215687734-c5429319-94d4-4bff-ab33-a45dbb5e1f04.png)
