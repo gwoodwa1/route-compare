@@ -3,54 +3,58 @@
         <!-- keepalive -->
         <route-table>
             <table-name>inet.0</table-name>
-            <destination-count>2</destination-count>
-            <total-route-count>2</total-route-count>
-            <active-route-count>2</active-route-count>
+            <destination-count>3</destination-count>
+            <total-route-count>3</total-route-count>
+            <active-route-count>3</active-route-count>
             <holddown-route-count>0</holddown-route-count>
             <hidden-route-count>0</hidden-route-count>
             <rt junos:style="brief">
-                <rt-destination>172.0.0.0/24</rt-destination>
+                <rt-destination>10.0.0.0/24</rt-destination>
                 <rt-entry>
                     <active-tag>*</active-tag>
                     <current-active/>
                     <last-active/>
                     <protocol-name>Direct</protocol-name>
                     <preference>0</preference>
-                    <age junos:seconds="679">00:11:19</age>
+                    <age junos:seconds="38352">10:39:12</age>
                     <nh>
                         <selected-next-hop/>
                         <via>fxp0.0</via>
                     </nh>
-                </rt-entry>             
+                </rt-entry>
             </rt>
             <rt junos:style="brief">
-                <rt-destination>172.1.0.15/32</rt-destination>
+                <rt-destination>10.0.0.15/32</rt-destination>
                 <rt-entry>
                     <active-tag>*</active-tag>
                     <current-active/>
                     <last-active/>
                     <protocol-name>Local</protocol-name>
                     <preference>0</preference>
-                    <age junos:seconds="679">00:11:19</age>
+                    <age junos:seconds="38352">10:39:12</age>
                     <nh-type>Local</nh-type>
                     <nh>
                         <nh-local-interface>fxp0.0</nh-local-interface>
                     </nh>
                 </rt-entry>
             </rt>
-                <rt junos:style="brief">
-                <rt-destination>186.1.0.16/32</rt-destination>
+            <rt junos:style="brief">
+                <rt-destination>10.10.10.9/32</rt-destination>
                 <rt-entry>
                     <active-tag>*</active-tag>
                     <current-active/>
                     <last-active/>
-                    <protocol-name>Local</protocol-name>
-                    <preference>0</preference>
-                    <age junos:seconds="679">00:11:19</age>
-                    <nh-type>Local</nh-type>
+                    <protocol-name>Static</protocol-name>
+                    <preference>5</preference>
+                    <age junos:seconds="42">00:00:42</age>
                     <nh>
-                        <nh-local-interface>fxp0.2</nh-local-interface>
-                        <via>10.17.1.3</via>
+                        <selected-next-hop/>
+                        <to>10.0.0.1</to>
+                        <via>fxp0.0</via>
+                    </nh>
+                    <nh>                
+                        <to>10.0.0.12</to>
+                        <via>fxp0.0</via>
                     </nh>
                 </rt-entry>
             </rt>
@@ -70,7 +74,7 @@
                     <last-active/>
                     <protocol-name>INET6</protocol-name>
                     <preference>0</preference>
-                    <age junos:seconds="685">00:11:25</age>
+                    <age junos:seconds="38358">10:39:18</age>
                     <nh-type>MultiRecv</nh-type>
                 </rt-entry>
             </rt>
