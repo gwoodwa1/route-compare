@@ -11,4 +11,5 @@ Results are displayed in a table via the Terminal
 
 
 
-![Screenshot from 2023-01-31 06-52-17](https://user-images.githubusercontent.com/63735312/215687734-c5429319-94d4-4bff-ab33-a45dbb5e1f04.png)
+
+![Screenshot from 2023-02-02 11-29-32](https://user-images.githubusercontent.com/63735312/216313330-f6614402-a4cd-42f5-bf28-2170cf10444e.png)
