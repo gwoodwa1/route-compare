@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+
 type RouteTable struct {
 	XMLName          xml.Name `xml:"rpc-reply"`
 	RouteInformation struct {
@@ -37,6 +38,13 @@ type RouteTable struct {
 	} `xml:"route-information"`
 } 
 
+// parseXMLFile parses an XML file and returns a RouteTable and an error.
+//
+// fileName is the name of the XML file to be parsed.
+//
+// If the XML file can be successfully parsed, a pointer to a RouteTable and a nil error
+// are returned. Otherwise, a nil pointer to a RouteTable and an error are returned.
+
 func parseXMLFile(fileName string) (*RouteTable, error) {
 	xmlFile, err := os.Open(fileName)
 	if err != nil {
@@ -51,6 +59,15 @@ func parseXMLFile(fileName string) (*RouteTable, error) {
 
 	return &routetable, nil
 }
+
+// getRtDestinationEntries retrieves the RtDestination entries for the specified routing instances.
+//
+// reply is a pointer to a RouteTable.
+// routinginstance is a list of routing instances to retrieve entries from. If routinginstance is ["ALL"],
+// entries from all routing instances are returned.
+//
+// The function returns a list of RtDestination entries.
+
 
 func getRtDestinationEntries(reply *RouteTable, routinginstance []string) []RtDestination {
     var entries []RtDestination
@@ -79,6 +96,12 @@ func getRtDestinationEntries(reply *RouteTable, routinginstance []string) []RtDe
     return entries
 }
 
+// contains checks if a string is in a list of strings.
+//
+// s is a list of strings.
+// e is a string to be checked for in s.
+//
+// The function returns a boolean indicating whether e is in s.
 
 func contains(s []string, e string) bool {
 	for _, a := range s {
@@ -95,6 +118,8 @@ type RtDestination struct {
 	Via         []string
 	TableName   string
 }
+
+// Function to check if two slices are identical
 
 func isSameSlice(a, b []string) bool {
     if len(a) != len(b) {
@@ -119,6 +144,7 @@ func main() {
 
 	if *help {
 		flag.PrintDefaults()
+		fmt.Println("\nVersion 0.1 - RouteCompare for JunOS devices compares 'show route | display xml' output")
 		return
 	}
 
@@ -190,3 +216,5 @@ func main() {
 		posttable.Render()
 	}
 }
+	
+
