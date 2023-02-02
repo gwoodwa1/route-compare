@@ -84,11 +84,19 @@ func getRtDestinationEntries(reply *RouteTable, routinginstance []string) []RtDe
 			var via []string
             for _, nh := range rt.RtEntry.Nh {
                 via = append(via, nh.Via)
-			}			
+			}
+			
+			var nhLocalInterfaces []string
+            for _, nh := range rt.RtEntry.Nh {
+                nextHops = append(nextHops, nh.To)
+                via = append(via, nh.Via)
+				nhLocalInterfaces = append(nhLocalInterfaces, nh.NhLocalInterface)
+            }
 				entries = append(entries, RtDestination{
                 Destination: rt.RtDestination,
                 NextHop:     nextHops,
 				Via: via,
+				NhLocalInterface: nhLocalInterfaces,
                 TableName:   tableName,
             })
         }
@@ -117,6 +125,7 @@ type RtDestination struct {
 	NextHop     []string
 	Via         []string
 	TableName   string
+	NhLocalInterface []string
 }
 
 // Function to check if two slices are identical
@@ -173,18 +182,18 @@ func main() {
 	postDestinations := getRtDestinationEntries(postRpcReply,routinginstance)
 	
 	pretable := tablewriter.NewWriter(os.Stdout)
-	pretable.SetHeader([]string{"Destination", "NextHop","Via","Routing-Instance"})
+	pretable.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
 
 	for _, preDest := range preDestinations {
 		found := false
 		for _, postDest := range postDestinations {
-			if preDest.Destination == postDest.Destination && isSameSlice(preDest.NextHop, postDest.NextHop) && isSameSlice(preDest.Via, postDest.Via){
+			if preDest.Destination == postDest.Destination && isSameSlice(preDest.NhLocalInterface,postDest.NhLocalInterface) && isSameSlice(preDest.NextHop, postDest.NextHop) && isSameSlice(preDest.Via, postDest.Via){
 				found = true
 				break
 			}
 		}
 		if !found {
-			pretable.Append([]string{fmt.Sprintf("%v", preDest.Destination), fmt.Sprintf("%v", preDest.NextHop),fmt.Sprintf("%v", preDest.Via), fmt.Sprintf("%v", preDest.TableName)})
+			pretable.Append([]string{fmt.Sprintf("%v", preDest.Destination), fmt.Sprintf("%v", preDest.NextHop),fmt.Sprintf("%v", preDest.Via), fmt.Sprintf("%v", preDest.NhLocalInterface), fmt.Sprintf("%v", preDest.TableName)})
             
 		}
 		
@@ -196,18 +205,18 @@ func main() {
 	}
 	
 	posttable := tablewriter.NewWriter(os.Stdout)
-	posttable.SetHeader([]string{"Destination", "NextHop","Via","Routing-Instance"})
+	posttable.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
 	
 	for _, postDest := range postDestinations {
 		found := false
 		for _, preDest := range preDestinations {
-			if postDest.Destination == preDest.Destination && isSameSlice(postDest.NextHop,preDest.NextHop) && isSameSlice(postDest.Via,preDest.Via) {
+			if postDest.Destination == preDest.Destination && isSameSlice(postDest.NhLocalInterface,preDest.NhLocalInterface) && isSameSlice(postDest.NextHop,preDest.NextHop) && isSameSlice(postDest.Via,preDest.Via) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			posttable.Append([]string{fmt.Sprintf("%v", postDest.Destination), fmt.Sprintf("%v", postDest.NextHop),fmt.Sprintf("%v", postDest.Via), fmt.Sprintf("%v", postDest.TableName)})
+			posttable.Append([]string{fmt.Sprintf("%v", postDest.Destination), fmt.Sprintf("%v", postDest.NextHop),fmt.Sprintf("%v", postDest.Via), fmt.Sprintf("%v", postDest.NhLocalInterface), fmt.Sprintf("%v", postDest.TableName)})
 		}
 	}
 	if posttable != nil{
