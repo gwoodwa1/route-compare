@@ -142,6 +142,37 @@ func isSameSlice(a, b []string) bool {
     return true
 }
 
+
+// Function to create the Tables displaying the differences in the Routing Tables
+func createTable(destinationsrt1 []RtDestination,destinationsrt2 []RtDestination, action string){
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
+	for _, rt1Dest := range destinationsrt1 {
+		found := false
+		for _, rt2Dest := range destinationsrt2{
+			if rt1Dest.Destination == rt2Dest.Destination && isSameSlice(rt1Dest.NhLocalInterface,rt2Dest.NhLocalInterface) && isSameSlice(rt1Dest.NextHop, rt2Dest.NextHop) && isSameSlice(rt1Dest.Via, rt2Dest.Via){
+				found = true
+				break
+			}
+		}
+		if !found {
+			table.Append([]string{fmt.Sprintf("%v", rt1Dest.Destination), fmt.Sprintf("%v", rt1Dest.NextHop),fmt.Sprintf("%v", rt1Dest.Via), fmt.Sprintf("%v", rt1Dest.NhLocalInterface), fmt.Sprintf("%v", rt1Dest.TableName)})
+            
+		}
+		
+	}
+	if table != nil && action=="PRE"{
+		fmt.Println("\n***    Pre Route Table  ***")
+		fmt.Println("***    Entries not found in the Post Routing Table Output  ***")
+		table.Render()
+	}
+	if table != nil && action=="POST"{
+		fmt.Println("\n***    Post Route Table  ***")
+		fmt.Println("***    Entries not found in the Pre Routing Table Output  ***")
+		table.Render()
+	}   
+}
+
 func main() {
 	preXMLFile := flag.String("pre", "", "pre XML file")
 	postXMLFile := flag.String("post", "", "post XML file")
@@ -181,49 +212,7 @@ func main() {
 	preDestinations := getRtDestinationEntries(preRpcReply,routinginstance)
 	postDestinations := getRtDestinationEntries(postRpcReply,routinginstance)
 	
-	pretable := tablewriter.NewWriter(os.Stdout)
-	pretable.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
-
-	for _, preDest := range preDestinations {
-		found := false
-		for _, postDest := range postDestinations {
-			if preDest.Destination == postDest.Destination && isSameSlice(preDest.NhLocalInterface,postDest.NhLocalInterface) && isSameSlice(preDest.NextHop, postDest.NextHop) && isSameSlice(preDest.Via, postDest.Via){
-				found = true
-				break
-			}
-		}
-		if !found {
-			pretable.Append([]string{fmt.Sprintf("%v", preDest.Destination), fmt.Sprintf("%v", preDest.NextHop),fmt.Sprintf("%v", preDest.Via), fmt.Sprintf("%v", preDest.NhLocalInterface), fmt.Sprintf("%v", preDest.TableName)})
-            
-		}
-		
-	}
-    if pretable != nil{
-		fmt.Println("***    Pre Route Table  ***")
-		fmt.Println("***    Entries not found in the Post Routing Table Output  ***")
-		pretable.Render()
-	}
-	
-	posttable := tablewriter.NewWriter(os.Stdout)
-	posttable.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
-	
-	for _, postDest := range postDestinations {
-		found := false
-		for _, preDest := range preDestinations {
-			if postDest.Destination == preDest.Destination && isSameSlice(postDest.NhLocalInterface,preDest.NhLocalInterface) && isSameSlice(postDest.NextHop,preDest.NextHop) && isSameSlice(postDest.Via,preDest.Via) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			posttable.Append([]string{fmt.Sprintf("%v", postDest.Destination), fmt.Sprintf("%v", postDest.NextHop),fmt.Sprintf("%v", postDest.Via), fmt.Sprintf("%v", postDest.NhLocalInterface), fmt.Sprintf("%v", postDest.TableName)})
-		}
-	}
-	if posttable != nil{
-		fmt.Println("\n\n***    Post Route Table  ***")
-		fmt.Println("***    Entries not found in the Pre Routing Table Output  ***")
-		posttable.Render()
-	}
+	// Create and Print a Table in the Terminal for any differences found in the snapshots
+ 	createTable(preDestinations,postDestinations,"PRE")
+	createTable(preDestinations,postDestinations,"POST")
 }
-	
-
