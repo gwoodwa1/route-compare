@@ -144,12 +144,12 @@ func isSameSlice(a, b []string) bool {
 
 
 // Function to create the Tables displaying the differences in the Routing Tables
-func createTable(destinationsrt1 []RtDestination,destinationsrt2 []RtDestination, action string){
+func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestination, action string){
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
-	for _, rt1Dest := range destinationsrt1 {
+	for _, rt1Dest := range *destinationsrt1 {
 		found := false
-		for _, rt2Dest := range destinationsrt2{
+		for _, rt2Dest := range *destinationsrt2{
 			if rt1Dest.Destination == rt2Dest.Destination && isSameSlice(rt1Dest.NhLocalInterface,rt2Dest.NhLocalInterface) && isSameSlice(rt1Dest.NextHop, rt2Dest.NextHop) && isSameSlice(rt1Dest.Via, rt2Dest.Via){
 				found = true
 				break
@@ -213,6 +213,8 @@ func main() {
 	postDestinations := getRtDestinationEntries(postRpcReply,routinginstance)
 	
 	// Create and Print a Table in the Terminal for any differences found in the snapshots
- 	createTable(preDestinations,postDestinations,"PRE")
-	createTable(preDestinations,postDestinations,"POST")
+ 	createTable(&preDestinations,&postDestinations,"PRE")
+	createTable(&preDestinations,&postDestinations,"POST")
 }
+	
+
