@@ -218,9 +218,6 @@ func main() {
 	fmt.Println("Pre XML file:", preXMLFile)
 	fmt.Println("Post XML file:", postXMLFile)
 
-	
-	// Using a channel we can speed up the creation of reading in any Large XML File
-
 	results := make(chan *RouteTable, 2)
 	
 	go func() {
@@ -244,13 +241,21 @@ func main() {
 	preRpcReply := <-results
 	postRpcReply := <-results
 
-	preDestinations := getRtDestinationEntries(preRpcReply, routinginstance)
-	postDestinations := getRtDestinationEntries(postRpcReply, routinginstance)
+	destinationCh := make(chan []RtDestination, 2)
 	
-	// Create and Print a Table in the Terminal for any differences found in the snapshots
- 	createTable(&preDestinations, &postDestinations, "PRE")
+	go func() {
+		preDestinations := getRtDestinationEntries(preRpcReply, routinginstance)
+		destinationCh <- preDestinations
+	}()
+
+	go func() {
+		postDestinations := getRtDestinationEntries(postRpcReply, routinginstance)
+		destinationCh <- postDestinations
+	}()
+
+	preDestinations := <-destinationCh
+	postDestinations := <-destinationCh
+
+	createTable(&preDestinations, &postDestinations, "PRE")
 	createTable(&preDestinations, &postDestinations, "POST")
 }
-
-	
-
