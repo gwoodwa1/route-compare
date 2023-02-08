@@ -156,8 +156,8 @@ func isSameSlice(a, b []string) bool {
 
 
 // Function to create the Tables displaying the differences in the Routing Tables
-func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestination, action string){
-	table := tablewriter.NewWriter(os.Stdout)
+func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestination, action string)(table *tablewriter.Table){
+	table = tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
 	for _, rt1Dest := range *destinationsrt1 {
 		found := false
@@ -176,13 +176,14 @@ func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestinati
 	if table != nil && action=="PRE"{
 		fmt.Println("\n***    Pre Route Table  ***")
 		fmt.Println("***    Entries not found in the Post Routing Table Output  ***")
-		table.Render()
+
 	}
 	if table != nil && action=="POST"{
 		fmt.Println("\n***    Post Route Table  ***")
 		fmt.Println("***    Entries not found in the Pre Routing Table Output  ***")
-		table.Render()
-	}   
+
+	}
+	return table 
 }
 
 func parseFlags() (string, string, []string, bool) {
@@ -256,6 +257,23 @@ func main() {
 	preDestinations := <-destinationCh
 	postDestinations := <-destinationCh
 
-	createTable(&preDestinations, &postDestinations, "PRE")
-	createTable(&preDestinations, &postDestinations, "POST")
+	// This block we deal with rendering the table to the terminal using a channel to run concurrent calls
+	
+	tableCh := make(chan *tablewriter.Table, 2)
+
+	go func() {
+		pretable := createTable(&preDestinations, &postDestinations, "PRE")
+		tableCh <- pretable
+	}()
+
+	go func() {
+		postable := createTable(&preDestinations, &postDestinations, "POST")
+		tableCh <- postable
+	}()
+
+	pretable := <-tableCh
+	postable := <-tableCh
+
+	pretable.Render()
+	postable.Render()
 }
