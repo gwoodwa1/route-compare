@@ -7,6 +7,8 @@ import (
 	"os"
 	"github.com/olekukonko/tablewriter"
 	"strings"
+	"io/ioutil"
+
 )
 
 
@@ -46,19 +48,29 @@ type RouteTable struct {
 // are returned. Otherwise, a nil pointer to a RouteTable and an error are returned.
 
 func parseXMLFile(fileName string) (*RouteTable, error) {
-	xmlFile, err := os.Open(fileName)
-	if err != nil {
-		return nil, err
-	}
-	defer xmlFile.Close()
+    xmlFile, err := os.Open(fileName)
+    if err != nil {
+        return nil, err
+    }
+    defer xmlFile.Close()
 
-	var routetable RouteTable
-	if err := xml.NewDecoder(xmlFile).Decode(&routetable); err != nil {
-		return nil, err
-	}
+    xmlData, err := ioutil.ReadAll(xmlFile)
+    if err != nil {
+        return nil, err
+    }
+    // Remove all that Whitespace which is taking up memory
+    xmlData = []byte(strings.Replace(string(xmlData), "  ", "", -1))
+    xmlData = []byte(strings.Replace(string(xmlData), "\n", "", -1))
 
-	return &routetable, nil
+    var routetable RouteTable
+    if err := xml.Unmarshal(xmlData, &routetable); err != nil {
+        return nil, err
+    }
+
+    return &routetable, nil
 }
+
+
 
 // getRtDestinationEntries retrieves the RtDestination entries for the specified routing instances.
 //
@@ -173,10 +185,10 @@ func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestinati
 	}   
 }
 
-func main() {
+func parseFlags() (string, string, []string, bool) {
 	preXMLFile := flag.String("pre", "", "pre XML file")
 	postXMLFile := flag.String("post", "", "post XML file")
-    rt := flag.String("vrf", "ALL", "list of RoutingTables seperated by a comma or ALL")
+	rt := flag.String("vrf", "ALL", "list of RoutingTables seperated by a comma or ALL")
 	help := flag.Bool("help", false, "display usage")
 
 	flag.Parse()
@@ -185,36 +197,60 @@ func main() {
 	if *help {
 		flag.PrintDefaults()
 		fmt.Println("\nVersion 0.1 - RouteCompare for JunOS devices compares 'show route | display xml' output")
-		return
+		return "", "", nil, true
 	}
 
 	if *preXMLFile == "" || *postXMLFile == "" {
 		fmt.Println("Both pre and post XML files are required.")
 		flag.PrintDefaults()
+		return "", "", nil, true
+	}
+
+	return *preXMLFile, *postXMLFile, routinginstance, false
+}
+
+func main() {
+	preXMLFile, postXMLFile, routinginstance, help := parseFlags()
+	if help {
 		return
 	}
 
-	fmt.Println("Pre XML file:", *preXMLFile)
-	fmt.Println("Post XML file:", *postXMLFile)
+	fmt.Println("Pre XML file:", preXMLFile)
+	fmt.Println("Post XML file:", postXMLFile)
 
-	preRpcReply, err := parseXMLFile(*preXMLFile)
-	if err != nil {
-		fmt.Println("Error parsing pre XML file:", err)
-		return
-	}
+	
+	// Using a channel we can speed up the creation of reading in any Large XML File
 
-	postRpcReply, postErr := parseXMLFile(*postXMLFile)
-	if postErr != nil {
-		fmt.Println("Error parsing post XML file:", postErr)
-		return
-	}
+	results := make(chan *RouteTable, 2)
+	
+	go func() {
+		preRpcReply, err := parseXMLFile(preXMLFile)
+		if err != nil {
+			fmt.Println("Error parsing pre XML file:", err)
+			return
+		}
+		results <- preRpcReply
+	}()
 
-	preDestinations := getRtDestinationEntries(preRpcReply,routinginstance)
-	postDestinations := getRtDestinationEntries(postRpcReply,routinginstance)
+	go func() {
+		postRpcReply, postErr := parseXMLFile(postXMLFile)
+		if postErr != nil {
+			fmt.Println("Error parsing post XML file:", postErr)
+			return
+		}
+		results <- postRpcReply
+	}()
+
+	preRpcReply := <-results
+	postRpcReply := <-results
+
+	preDestinations := getRtDestinationEntries(preRpcReply, routinginstance)
+	postDestinations := getRtDestinationEntries(postRpcReply, routinginstance)
 	
 	// Create and Print a Table in the Terminal for any differences found in the snapshots
- 	createTable(&preDestinations,&postDestinations,"PRE")
-	createTable(&preDestinations,&postDestinations,"POST")
+ 	createTable(&preDestinations, &postDestinations, "PRE")
+	createTable(&preDestinations, &postDestinations, "POST")
 }
+
 	
 
