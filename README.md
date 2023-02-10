@@ -7,7 +7,9 @@ or specify an indivdual routing instance.
 
 `go run routecompare.go -pre ./pre.xml -post ./post.xml -vrf inet.0`
 
-Results are displayed in a table via the Terminal
+Results are displayed in a table via the Terminal or File if you using the below example:
+
+`go run routecompare.go -pre ./pre.xml -post ./post.xml -vrf ALL -file-output on`
 
 
 
