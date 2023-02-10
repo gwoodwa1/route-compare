@@ -20,7 +20,7 @@ type RouteTable struct {
 			TableName          string `xml:"table-name"`
 			Rt                 []struct {
 				RtDestination string `xml:"rt-destination"`
-				RtEntry       struct {
+				RtEntry       []struct {
 					ProtocolName  string `xml:"protocol-name"`
 					Preference    string `xml:"preference"`
 					Age           struct {
@@ -90,32 +90,28 @@ func getRtDestinationEntries(reply *RouteTable, routinginstance []string) []RtDe
             continue
         }
         for _, rt := range routeTable.Rt {
-            var nextHops []string
-            for _, nh := range rt.RtEntry.Nh {
-                nextHops = append(nextHops, nh.To)
-		            }
-			var via []string
-            for _, nh := range rt.RtEntry.Nh {
-                via = append(via, nh.Via)
-			}
-			
-			var nhLocalInterfaces []string
-            for _, nh := range rt.RtEntry.Nh {
-                nextHops = append(nextHops, nh.To)
-                via = append(via, nh.Via)
-				nhLocalInterfaces = append(nhLocalInterfaces, nh.NhLocalInterface)
+            for _, rtEntry := range rt.RtEntry {
+                var nextHops []string
+                var via []string
+                var nhLocalInterfaces []string
+                for _, nh := range rtEntry.Nh {
+                    nextHops = append(nextHops, nh.To)
+                    via = append(via, nh.Via)
+                    nhLocalInterfaces = append(nhLocalInterfaces, nh.NhLocalInterface)
+                }
+                entries = append(entries, RtDestination{
+                    Destination: rt.RtDestination,
+                    NextHop:     nextHops,
+                    Via:         via,
+                    NhLocalInterface: nhLocalInterfaces,
+                    TableName:   tableName,
+                })
             }
-				entries = append(entries, RtDestination{
-                Destination: rt.RtDestination,
-                NextHop:     nextHops,
-				Via: via,
-				NhLocalInterface: nhLocalInterfaces,
-                TableName:   tableName,
-            })
         }
     }
     return entries
 }
+
 
 // contains checks if a string is in a list of strings.
 //
@@ -200,7 +196,7 @@ func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestinati
 		fmt.Println("\n***    Post Route Table  ***")
 		fmt.Println("***    Entries not found in the Pre Routing Table Output  ***")
 
-	}else{
+	}else if outputfile != "off" {
 		fmt.Printf("\n***    Output to File - %s ***\n",fileName)
 	}
 	table.Render()
@@ -305,4 +301,6 @@ func main() {
 }
 
 	
+
+
 
