@@ -8,6 +8,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"strings"
 	"io/ioutil"
+	"io"
 
 )
 
@@ -156,8 +157,25 @@ func isSameSlice(a, b []string) bool {
 
 
 // Function to create the Tables displaying the differences in the Routing Tables
-func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestination, action string)(table *tablewriter.Table){
-	table = tablewriter.NewWriter(os.Stdout)
+func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestination, action string,outputfile string)(table *tablewriter.Table){
+	
+	var file io.Writer
+	var fileName string
+
+	if outputfile != "off"{
+		fileName = fmt.Sprintf("%s.txt", action)
+		f, err := os.Create(fileName)
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		defer f.Close()
+		file = f
+	} else {
+		file = os.Stdout
+	}
+
+	table = tablewriter.NewWriter(file)
 	table.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
 	for _, rt1Dest := range *destinationsrt1 {
 		found := false
@@ -173,22 +191,30 @@ func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestinati
 		}
 		
 	}
-	if table != nil && action=="PRE"{
+	if table != nil && action=="PRE" && outputfile == "off"{
 		fmt.Println("\n***    Pre Route Table  ***")
 		fmt.Println("***    Entries not found in the Post Routing Table Output  ***")
 
 	}
-	if table != nil && action=="POST"{
+	if table != nil && action=="POST" && outputfile == "off"{
 		fmt.Println("\n***    Post Route Table  ***")
 		fmt.Println("***    Entries not found in the Pre Routing Table Output  ***")
 
+	}else{
+		fmt.Printf("\n***    Output to File - %s ***\n",fileName)
 	}
+	table.Render()
 	return table 
 }
 
-func parseFlags() (string, string, []string, bool) {
+
+
+
+
+func parseFlags() (string, string, string, []string, bool) {
 	preXMLFile := flag.String("pre", "", "pre XML file")
 	postXMLFile := flag.String("post", "", "post XML file")
+	outputFile := flag.String("file-output", "off", "on or off to write table to file. default off")
 	rt := flag.String("vrf", "ALL", "list of RoutingTables seperated by a comma or ALL")
 	help := flag.Bool("help", false, "display usage")
 
@@ -198,20 +224,21 @@ func parseFlags() (string, string, []string, bool) {
 	if *help {
 		flag.PrintDefaults()
 		fmt.Println("\nVersion 0.1 - RouteCompare for JunOS devices compares 'show route | display xml' output")
-		return "", "", nil, true
+		return "", "", "",nil, true
 	}
 
 	if *preXMLFile == "" || *postXMLFile == "" {
 		fmt.Println("Both pre and post XML files are required.")
 		flag.PrintDefaults()
-		return "", "", nil, true
+		return "", "", "",nil,true
 	}
 
-	return *preXMLFile, *postXMLFile, routinginstance, false
+	return *preXMLFile, *postXMLFile,*outputFile,routinginstance,false
 }
 
 func main() {
-	preXMLFile, postXMLFile, routinginstance, help := parseFlags()
+	// Deals with the command line options and passes them to the parseFlags() function
+	preXMLFile, postXMLFile,outputFile,routinginstance, help := parseFlags()
 	if help {
 		return
 	}
@@ -219,8 +246,9 @@ func main() {
 	fmt.Println("Pre XML file:", preXMLFile)
 	fmt.Println("Post XML file:", postXMLFile)
 
+	// Create a channel to pass the pre and post XML files
 	results := make(chan *RouteTable, 2)
-	
+
 	go func() {
 		preRpcReply, err := parseXMLFile(preXMLFile)
 		if err != nil {
@@ -242,6 +270,8 @@ func main() {
 	preRpcReply := <-results
 	postRpcReply := <-results
 
+	// Create a channel to pass the Destination Prefixes and Entries
+
 	destinationCh := make(chan []RtDestination, 2)
 	
 	go func() {
@@ -257,23 +287,22 @@ func main() {
 	preDestinations := <-destinationCh
 	postDestinations := <-destinationCh
 
-	// This block we deal with rendering the table to the terminal using a channel to run concurrent calls
+	// This block we deal with rendering the table to the terminal or file using a channel to run concurrent calls
 	
 	tableCh := make(chan *tablewriter.Table, 2)
 
 	go func() {
-		pretable := createTable(&preDestinations, &postDestinations, "PRE")
-		tableCh <- pretable
+		tableCh <- createTable(&preDestinations, &postDestinations, "PRE", outputFile)
 	}()
-
+	
 	go func() {
-		postable := createTable(&preDestinations, &postDestinations, "POST")
-		tableCh <- postable
+		tableCh <- createTable(&preDestinations, &postDestinations, "POST", outputFile)
 	}()
+	
+	<-tableCh
+	<-tableCh
 
-	pretable := <-tableCh
-	postable := <-tableCh
-
-	pretable.Render()
-	postable.Render()
 }
+
+	
+
