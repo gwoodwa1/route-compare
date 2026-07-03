@@ -1,306 +1,174 @@
-package main
+// Package routecompare parses Junos XML route-table snapshots and compares them.
+package routecompare
 
 import (
-	"flag"
-	"fmt"
 	"encoding/xml"
-	"os"
-	"github.com/olekukonko/tablewriter"
-	"strings"
-	"io/ioutil"
+	"fmt"
 	"io"
-
+	"os"
+	"sort"
 )
 
+// Version is the semantic version of this release.
+const Version = "1.0.0"
 
-type RouteTable struct {
-	XMLName          xml.Name `xml:"rpc-reply"`
-	RouteInformation struct {
-		RouteTable []struct {
-			TableName          string `xml:"table-name"`
-			Rt                 []struct {
-				RtDestination string `xml:"rt-destination"`
-				RtEntry       []struct {
-					ProtocolName  string `xml:"protocol-name"`
-					Preference    string `xml:"preference"`
-					Age           struct {
-						Text    string `xml:",chardata"`
-						Seconds string `xml:"seconds,attr"`
-					} `xml:"age"`
-					Nh []struct {
-						Text             string `xml:",chardata"`
-						SelectedNextHop  string `xml:"selected-next-hop"`
-						To               string `xml:"to"`
-						Via              string `xml:"via"`
-						NhLocalInterface string `xml:"nh-local-interface"`
-					} `xml:"nh"`
-					NhType string `xml:"nh-type"`
-				} `xml:"rt-entry"`
-			} `xml:"rt"`
-		} `xml:"route-table"`
-	} `xml:"route-information"`
-} 
-
-// parseXMLFile parses an XML file and returns a RouteTable and an error.
-//
-// fileName is the name of the XML file to be parsed.
-//
-// If the XML file can be successfully parsed, a pointer to a RouteTable and a nil error
-// are returned. Otherwise, a nil pointer to a RouteTable and an error are returned.
-
-func parseXMLFile(fileName string) (*RouteTable, error) {
-    xmlFile, err := os.Open(fileName)
-    if err != nil {
-        return nil, err
-    }
-    defer xmlFile.Close()
-
-    xmlData, err := ioutil.ReadAll(xmlFile)
-    if err != nil {
-        return nil, err
-    }
-    // Remove all that Whitespace which is taking up memory
-    xmlData = []byte(strings.Replace(string(xmlData), "  ", "", -1))
-    xmlData = []byte(strings.Replace(string(xmlData), "\n", "", -1))
-
-    var routetable RouteTable
-    if err := xml.Unmarshal(xmlData, &routetable); err != nil {
-        return nil, err
-    }
-
-    return &routetable, nil
+// NextHop identifies one forwarding path for a route.
+type NextHop struct {
+	To             string
+	Via            string
+	LocalInterface string
 }
 
-
-
-// getRtDestinationEntries retrieves the RtDestination entries for the specified routing instances.
-//
-// reply is a pointer to a RouteTable.
-// routinginstance is a list of routing instances to retrieve entries from. If routinginstance is ["ALL"],
-// entries from all routing instances are returned.
-//
-// The function returns a list of RtDestination entries.
-
-
-func getRtDestinationEntries(reply *RouteTable, routinginstance []string) []RtDestination {
-    var entries []RtDestination
-    for _, routeTable := range reply.RouteInformation.RouteTable {
-        tableName := routeTable.TableName
-        if !contains(routinginstance, "ALL") && !contains(routinginstance, tableName) {
-            continue
-        }
-        for _, rt := range routeTable.Rt {
-            for _, rtEntry := range rt.RtEntry {
-                var nextHops []string
-                var via []string
-                var nhLocalInterfaces []string
-                for _, nh := range rtEntry.Nh {
-                    nextHops = append(nextHops, nh.To)
-                    via = append(via, nh.Via)
-                    nhLocalInterfaces = append(nhLocalInterfaces, nh.NhLocalInterface)
-                }
-                entries = append(entries, RtDestination{
-                    Destination: rt.RtDestination,
-                    NextHop:     nextHops,
-                    Via:         via,
-                    NhLocalInterface: nhLocalInterfaces,
-                    TableName:   tableName,
-                })
-            }
-        }
-    }
-    return entries
-}
-
-
-// contains checks if a string is in a list of strings.
-//
-// s is a list of strings.
-// e is a string to be checked for in s.
-//
-// The function returns a boolean indicating whether e is in s.
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
-type RtDestination struct {
+// Route is the comparison-friendly representation of a Junos route entry.
+type Route struct {
 	Destination string
-	NextHop     []string
-	Via         []string
-	TableName   string
-	NhLocalInterface []string
+	Table       string
+	Protocol    string
+	Preference  string
+	NextHopType string
+	NextHops    []NextHop
 }
 
-// Function to check if two slices are identical
-
-func isSameSlice(a, b []string) bool {
-    if len(a) != len(b) {
-        return false
-    }
-    for i, v := range a {
-        if v != b[i] {
-            return false
-        }
-    }
-    return true
+// Snapshot contains the route tables parsed from one rpc-reply.
+type Snapshot struct {
+	tables []routeTable
 }
 
+type rpcReply struct {
+	RouteInformation struct {
+		Tables []routeTable `xml:"route-table"`
+	} `xml:"route-information"`
+}
 
-// Function to create the Tables displaying the differences in the Routing Tables
-func createTable(destinationsrt1 *[]RtDestination,destinationsrt2 *[]RtDestination, action string,outputfile string)(table *tablewriter.Table){
-	
-	var file io.Writer
-	var fileName string
+type routeTable struct {
+	Name   string     `xml:"table-name"`
+	Routes []xmlRoute `xml:"rt"`
+}
 
-	if outputfile != "off"{
-		fileName = fmt.Sprintf("%s.txt", action)
-		f, err := os.Create(fileName)
-		if err != nil {
-			fmt.Println(err)
-			return nil
-		}
-		defer f.Close()
-		file = f
-	} else {
-		file = os.Stdout
+type xmlRoute struct {
+	Destination string     `xml:"rt-destination"`
+	Entries     []xmlEntry `xml:"rt-entry"`
+}
+
+type xmlEntry struct {
+	Protocol    string       `xml:"protocol-name"`
+	Preference  string       `xml:"preference"`
+	NextHopType string       `xml:"nh-type"`
+	NextHops    []xmlNextHop `xml:"nh"`
+}
+
+type xmlNextHop struct {
+	To             string `xml:"to"`
+	Via            string `xml:"via"`
+	LocalInterface string `xml:"nh-local-interface"`
+}
+
+// Parse reads a Junos XML rpc-reply. The reader is not closed by Parse.
+func Parse(r io.Reader) (*Snapshot, error) {
+	if r == nil {
+		return nil, fmt.Errorf("parse route snapshot: nil reader")
 	}
 
-	table = tablewriter.NewWriter(file)
-	table.SetHeader([]string{"Destination", "NextHop","Via","NhLocalInterface","Routing-Instance"})
-	for _, rt1Dest := range *destinationsrt1 {
-		found := false
-		for _, rt2Dest := range *destinationsrt2{
-			if rt1Dest.Destination == rt2Dest.Destination && isSameSlice(rt1Dest.NhLocalInterface,rt2Dest.NhLocalInterface) && isSameSlice(rt1Dest.NextHop, rt2Dest.NextHop) && isSameSlice(rt1Dest.Via, rt2Dest.Via){
-				found = true
-				break
+	var reply rpcReply
+	if err := xml.NewDecoder(r).Decode(&reply); err != nil {
+		return nil, fmt.Errorf("parse route snapshot: %w", err)
+	}
+	return &Snapshot{tables: reply.RouteInformation.Tables}, nil
+}
+
+// ParseFile opens and parses a Junos XML rpc-reply.
+func ParseFile(name string) (*Snapshot, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, fmt.Errorf("open route snapshot %q: %w", name, err)
+	}
+	defer f.Close()
+	return Parse(f)
+}
+
+// Routes returns a copy of the snapshot's routes. With no table names, routes
+// from every routing table are returned.
+func (s *Snapshot) Routes(tableNames ...string) []Route {
+	if s == nil {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(tableNames))
+	for _, name := range tableNames {
+		if name != "" && name != "ALL" {
+			wanted[name] = struct{}{}
+		}
+	}
+
+	var routes []Route
+	for _, table := range s.tables {
+		if len(wanted) != 0 {
+			if _, ok := wanted[table.Name]; !ok {
+				continue
 			}
 		}
-		if !found {
-			table.Append([]string{fmt.Sprintf("%v", rt1Dest.Destination), fmt.Sprintf("%v", rt1Dest.NextHop),fmt.Sprintf("%v", rt1Dest.Via), fmt.Sprintf("%v", rt1Dest.NhLocalInterface), fmt.Sprintf("%v", rt1Dest.TableName)})
-            
+		for _, candidate := range table.Routes {
+			for _, entry := range candidate.Entries {
+				route := Route{
+					Destination: candidate.Destination,
+					Table:       table.Name,
+					Protocol:    entry.Protocol,
+					Preference:  entry.Preference,
+					NextHopType: entry.NextHopType,
+					NextHops:    make([]NextHop, len(entry.NextHops)),
+				}
+				for i, hop := range entry.NextHops {
+					route.NextHops[i] = NextHop{To: hop.To, Via: hop.Via, LocalInterface: hop.LocalInterface}
+				}
+				routes = append(routes, route)
+			}
 		}
-		
 	}
-	if table != nil && action=="PRE" && outputfile == "off"{
-		fmt.Println("\n***    Pre Route Table  ***")
-		fmt.Println("***    Entries not found in the Post Routing Table Output  ***")
-
-	}
-	if table != nil && action=="POST" && outputfile == "off"{
-		fmt.Println("\n***    Post Route Table  ***")
-		fmt.Println("***    Entries not found in the Pre Routing Table Output  ***")
-
-	}else if outputfile != "off" {
-		fmt.Printf("\n***    Output to File - %s ***\n",fileName)
-	}
-	table.Render()
-	return table 
+	return routes
 }
 
-
-
-
-
-func parseFlags() (string, string, string, []string, bool) {
-	preXMLFile := flag.String("pre", "", "pre XML file")
-	postXMLFile := flag.String("post", "", "post XML file")
-	outputFile := flag.String("file-output", "off", "on or off to write table to file. default off")
-	rt := flag.String("vrf", "ALL", "list of RoutingTables seperated by a comma or ALL")
-	help := flag.Bool("help", false, "display usage")
-
-	flag.Parse()
-	routinginstance := strings.Split(*rt, ",")
-
-	if *help {
-		flag.PrintDefaults()
-		fmt.Println("\nVersion 0.1 - RouteCompare for JunOS devices compares 'show route | display xml' output")
-		return "", "", "",nil, true
-	}
-
-	if *preXMLFile == "" || *postXMLFile == "" {
-		fmt.Println("Both pre and post XML files are required.")
-		flag.PrintDefaults()
-		return "", "", "",nil,true
-	}
-
-	return *preXMLFile, *postXMLFile,*outputFile,routinginstance,false
+// Difference holds routes found on only one side of a comparison.
+type Difference struct {
+	BeforeOnly []Route
+	AfterOnly  []Route
 }
 
-func main() {
-	// Deals with the command line options and passes them to the parseFlags() function
-	preXMLFile, postXMLFile,outputFile,routinginstance, help := parseFlags()
-	if help {
-		return
+// Empty reports whether the snapshots contain equivalent routes.
+func (d Difference) Empty() bool { return len(d.BeforeOnly) == 0 && len(d.AfterOnly) == 0 }
+
+// Comparator compares route snapshots. It is stateless and safe for concurrent use.
+type Comparator struct{}
+
+// Compare finds routes unique to before and after. Next-hop order is ignored,
+// while duplicate route entries are counted correctly.
+func (Comparator) Compare(before, after []Route) Difference {
+	return Difference{
+		BeforeOnly: subtract(before, after),
+		AfterOnly:  subtract(after, before),
 	}
-
-	fmt.Println("Pre XML file:", preXMLFile)
-	fmt.Println("Post XML file:", postXMLFile)
-
-	// Create a channel to pass the pre and post XML files
-	results := make(chan *RouteTable, 2)
-
-	go func() {
-		preRpcReply, err := parseXMLFile(preXMLFile)
-		if err != nil {
-			fmt.Println("Error parsing pre XML file:", err)
-			return
-		}
-		results <- preRpcReply
-	}()
-
-	go func() {
-		postRpcReply, postErr := parseXMLFile(postXMLFile)
-		if postErr != nil {
-			fmt.Println("Error parsing post XML file:", postErr)
-			return
-		}
-		results <- postRpcReply
-	}()
-
-	preRpcReply := <-results
-	postRpcReply := <-results
-
-	// Create a channel to pass the Destination Prefixes and Entries
-
-	destinationCh := make(chan []RtDestination, 2)
-	
-	go func() {
-		preDestinations := getRtDestinationEntries(preRpcReply, routinginstance)
-		destinationCh <- preDestinations
-	}()
-
-	go func() {
-		postDestinations := getRtDestinationEntries(postRpcReply, routinginstance)
-		destinationCh <- postDestinations
-	}()
-
-	preDestinations := <-destinationCh
-	postDestinations := <-destinationCh
-
-	// This block we deal with rendering the table to the terminal or file using a channel to run concurrent calls
-	
-	tableCh := make(chan *tablewriter.Table, 2)
-
-	go func() {
-		tableCh <- createTable(&preDestinations, &postDestinations, "PRE", outputFile)
-	}()
-	
-	go func() {
-		tableCh <- createTable(&preDestinations, &postDestinations, "POST", outputFile)
-	}()
-	
-	<-tableCh
-	<-tableCh
-
 }
 
-	
+func subtract(left, right []Route) []Route {
+	counts := make(map[string]int, len(right))
+	for _, route := range right {
+		counts[route.key()]++
+	}
+	var unique []Route
+	for _, route := range left {
+		key := route.key()
+		if counts[key] > 0 {
+			counts[key]--
+			continue
+		}
+		unique = append(unique, route)
+	}
+	return unique
+}
 
-
-
+func (r Route) key() string {
+	hops := make([]string, len(r.NextHops))
+	for i, hop := range r.NextHops {
+		hops[i] = hop.To + "\x00" + hop.Via + "\x00" + hop.LocalInterface
+	}
+	sort.Strings(hops)
+	return r.Table + "\x00" + r.Destination + "\x00" + r.Protocol + "\x00" + r.Preference + "\x00" + r.NextHopType + "\x00" + fmt.Sprint(hops)
+}
