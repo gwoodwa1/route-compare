@@ -29,6 +29,7 @@ type batchComparison struct {
 	ChangeTypes  []string `json:"change_types"`
 	IgnoreFields []string `json:"ignore_fields"`
 	Policy       string   `json:"policy"`
+	FailOn       string   `json:"fail_on"`
 }
 
 type batchReport struct {
@@ -66,7 +67,9 @@ func runBatch(manifestPath, format, output, failOn string, stdout io.Writer) err
 		if comparison.Policy != "" {
 			args = append(args, "-policy", resolveManifestPath(base, comparison.Policy))
 		}
-		if failOn != "none" {
+		if comparison.FailOn != "" {
+			args = append(args, "-fail-on", comparison.FailOn)
+		} else if failOn != "none" {
 			args = append(args, "-fail-on", failOn)
 		}
 		var jobOutput, jobErrors bytes.Buffer
