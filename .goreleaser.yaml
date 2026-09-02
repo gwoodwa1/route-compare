@@ -36,6 +36,7 @@ archives:
       - CHANGELOG.md
       - sbom.cdx.json
       - testdata/batch.json
+      - testdata/fixtures/*.xml
       - testdata/policies/*.json
 
 checksum:
@@ -50,4 +51,3 @@ release:
     Route Compare v{{ .Version }}
 
     See `CHANGELOG.md` for highlights and the included policy and batch examples for complete starting points.
-
