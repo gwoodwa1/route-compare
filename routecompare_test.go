@@ -83,3 +83,44 @@ func TestParseRejectsInvalidXML(t *testing.T) {
 		t.Fatal("expected malformed XML error")
 	}
 }
+
+func TestFixtureComparisons(t *testing.T) {
+	tests := []struct {
+		name                                string
+		before, after                       string
+		unchanged, added, removed, modified int
+	}{
+		{
+			name:      "small next-hop change",
+			before:    "testdata/fixtures/pre_1.xml",
+			after:     "testdata/fixtures/post_1.xml",
+			unchanged: 3,
+			modified:  1,
+		},
+		{
+			name:      "mixed route changes",
+			before:    "testdata/fixtures/pre_2.xml",
+			after:     "testdata/fixtures/post_2.xml",
+			unchanged: 21,
+			added:     2,
+			removed:   2,
+			modified:  5,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before, err := routecompare.ParseFile(tt.before)
+			if err != nil {
+				t.Fatal(err)
+			}
+			after, err := routecompare.ParseFile(tt.after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			diff := (routecompare.Comparator{}).Compare(before.Routes(), after.Routes())
+			if diff.UnchangedCount != tt.unchanged || len(diff.Added) != tt.added || len(diff.Removed) != tt.removed || len(diff.Modified) != tt.modified {
+				t.Fatalf("unexpected fixture comparison: unchanged=%d added=%d removed=%d modified=%d", diff.UnchangedCount, len(diff.Added), len(diff.Removed), len(diff.Modified))
+			}
+		})
+	}
+}
