@@ -41,7 +41,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	changeType := flags.String("change-type", "ALL", "display added, removed, modified, or ALL")
 	ignore := flags.String("ignore", "", "comma-separated route fields to ignore during comparison")
 	policyPath := flags.String("policy", "", "JSON comparison policy file")
-	format := flags.String("format", "text", "output format: text, json, markdown, or html")
+	format := flags.String("format", "text", "output format: text, json, markdown, html, or junit")
 	output := flags.String("output", "", "write the report to a file instead of stdout")
 	device := flags.String("device", "", "device name to include in report metadata")
 	changeID := flags.String("change-id", "", "change or ticket identifier for report metadata")
@@ -87,7 +87,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	outputFormat := strings.ToLower(strings.TrimSpace(*format))
 	if !validOutputFormat(outputFormat) {
-		return fmt.Errorf("unsupported format %q (use text, json, markdown, or html)", *format)
+		return fmt.Errorf("unsupported format %q (use text, json, markdown, html, or junit)", *format)
 	}
 	policy := strings.ToLower(strings.TrimSpace(*failOn))
 	if !validFailPolicy(policy) {
@@ -149,6 +149,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		diff,
 	)
 	report.Policy = policyResult
+	report.Failed = (policyResult != nil && !policyResult.Passed) || matchesFailPolicy(policy, diff)
 	reportWriter := stdout
 	var outputFile *os.File
 	if *output != "" {
@@ -169,7 +170,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("close report %q: %w", *output, err)
 		}
 	}
-	if (policyResult != nil && !policyResult.Passed) || matchesFailPolicy(policy, diff) {
+	if report.Failed {
 		reason := policy
 		if policyResult != nil && !policyResult.Passed {
 			reason = policyResult.Name
@@ -181,7 +182,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 
 func validOutputFormat(format string) bool {
 	switch format {
-	case "text", "json", "markdown", "html":
+	case "text", "json", "markdown", "html", "junit":
 		return true
 	default:
 		return false
@@ -199,6 +200,8 @@ func writeReport(w io.Writer, format string, report report) error {
 		return renderMarkdown(w, report)
 	case "html":
 		return renderHTML(w, report)
+	case "junit":
+		return renderJUnit(w, report)
 	default:
 		return fmt.Errorf("unsupported format %q", format)
 	}
