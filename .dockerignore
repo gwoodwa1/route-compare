@@ -1,0 +1,9 @@
+.git
+.github
+.gocache
+dist
+coverage.out
+sbom.cdx.json
+*.out
+.DS_Store
+

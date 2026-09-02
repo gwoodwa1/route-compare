@@ -20,6 +20,9 @@ All notable changes to route-compare are documented here.
 - GoReleaser cross-platform archives, checksums, CycloneDX SBOMs, and
   draft-before-publish binary verification.
 - Grouped weekly Dependabot updates for Go modules and GitHub Actions.
+- Hardened multi-stage container image with pinned builder and runtime digests,
+  a non-root runtime user, container smoke tests, embedded binary scanning,
+  Trivy image scanning, and Docker Dependabot updates.
 
 ### Changed
 

@@ -113,6 +113,42 @@ Valid policies are `none` (the default), `any`, `added`, `removed`, and
 
 Run `routecompare -version` to print the installed version.
 
+## Container image
+
+Build the hardened multi-stage image:
+
+```sh
+docker build --build-arg VERSION=1.2.0 -t routecompare:1.2.0 .
+```
+
+Compare snapshots by mounting an input directory read-only:
+
+```sh
+docker run --rm \
+  -v "$PWD/testdata:/workspace/testdata:ro" \
+  routecompare:1.2.0 \
+  -pre testdata/fixtures/pre_2.xml \
+  -post testdata/fixtures/post_2.xml
+```
+
+Write an HTML report through the non-root container user:
+
+```sh
+mkdir -p reports
+docker run --rm \
+  -v "$PWD/testdata:/workspace/testdata:ro" \
+  -v "$PWD/reports:/workspace/reports" \
+  routecompare:1.2.0 \
+  -pre testdata/fixtures/pre_2.xml \
+  -post testdata/fixtures/post_2.xml \
+  -format html \
+  -output reports/route-report.html
+```
+
+The runtime image uses pinned Alpine packages, contains only the compiled
+binary, CA certificates, and timezone data, and runs as the unprivileged
+`routecompare` user.
+
 ## Use as a package
 
 ```sh
@@ -181,11 +217,14 @@ GitHub Actions provides:
 
 - Tests, vet, race detection, coverage, parser fuzzing, CLI smoke tests,
   `govulncheck`, `gosec`, and compiled-binary vulnerability scanning.
+- Container build and smoke tests, embedded binary scanning, and Trivy runtime
+  package scanning.
 - CodeQL scanning on pushes, pull requests, and a weekly schedule.
 - Tag-driven GoReleaser builds for Linux, macOS, and Windows on amd64 and
   arm64, with checksums and a CycloneDX SBOM.
 - Draft-first releases whose binaries are scanned before publication.
 - Weekly grouped Dependabot updates for Go modules and GitHub Actions.
+- Weekly Docker base-image updates.
 
 The release workflow requires the tag, library version, and CLI version to
 match. After updating `Version` and `CHANGELOG.md`, create and push a semantic
