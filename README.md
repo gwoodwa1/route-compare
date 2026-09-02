@@ -4,7 +4,7 @@
 
 ## Release
 
-Current release: **v1.1.0**
+Current release: **v1.2.0**
 
 See [CHANGELOG.md](CHANGELOG.md) for release details.
 
@@ -13,7 +13,7 @@ Requirements: Go 1.22 or later. The module uses only the Go standard library.
 ## Install the CLI
 
 ```sh
-go install github.com/gwoodwa1/route-compare/cmd/routecompare@v1.1.0
+go install github.com/gwoodwa1/route-compare/cmd/routecompare@v1.2.0
 ```
 
 Compare all routing tables:
@@ -64,6 +64,39 @@ routecompare \
 `-change-type` controls which detail sections are displayed; summary counts and
 `-fail-on` continue to describe the complete filtered comparison.
 
+Ignore volatile fields when they are not relevant to a validation:
+
+```sh
+routecompare \
+  -pre testdata/fixtures/pre_2.xml \
+  -post testdata/fixtures/post_2.xml \
+  -ignore metric,metric2,communities
+```
+
+Apply a reusable policy containing filters, ignored fields, thresholds, and
+critical prefixes:
+
+```sh
+routecompare \
+  -pre testdata/fixtures/pre_2.xml \
+  -post testdata/fixtures/post_2.xml \
+  -policy testdata/policies/maintenance.json \
+  -format html \
+  -output policy-report.html
+```
+
+Run several comparisons from one manifest and emit CI-compatible JUnit XML:
+
+```sh
+routecompare \
+  -batch testdata/batch.json \
+  -format junit \
+  -output routecompare-results.xml
+```
+
+Batch manifests support text, JSON, Markdown, and JUnit output. Snapshot and
+policy paths inside a manifest are resolved relative to that manifest.
+
 By default, detected changes are reported with a successful exit status. For
 automation, `-fail-on` makes a matching comparison result exit with status 2:
 
@@ -80,7 +113,7 @@ Run `routecompare -version` to print the installed version.
 ## Use as a package
 
 ```sh
-go get github.com/gwoodwa1/route-compare@v1.1.0
+go get github.com/gwoodwa1/route-compare@v1.2.0
 ```
 
 ```go
@@ -124,6 +157,7 @@ func main() {
 - `(*Snapshot).TableNames()` lists the available routing tables, and
   `(*Snapshot).MissingTables(...string)` validates requested tables.
 - `(Comparator).Compare(before, after)` returns a `Difference`.
+- `Comparator.IgnoreFields` can suppress selected comparison attributes.
 - `Difference.Added`, `Removed`, and `Modified` classify changes. A modified
   route has the same table and destination on both sides, with its changed
   fields listed in `RouteChange.ChangedFields`.
@@ -146,6 +180,13 @@ Every structured report records its UTC generation time, routecompare version,
 input paths, and SHA-256 hashes. `-device` and `-change-id` add optional
 operational context. JSON reports also include the active table, protocol,
 prefix, and change-type filters.
+
+## Compared route attributes
+
+The comparison model includes protocol, preference, next-hop type and paths,
+active and hidden state, metrics, BGP local preference, AS path, communities,
+route tag, selected next-hop state, and MPLS labels. Next-hop and community
+ordering is normalized before comparison.
 
 ## Test fixtures
 

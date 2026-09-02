@@ -2,6 +2,25 @@
 
 All notable changes to route-compare are documented here.
 
+## v1.2.0
+
+### Added
+
+- JSON comparison policies with table, protocol, prefix, and display filters.
+- Policy limits for added, removed, and modified routes.
+- Critical-prefix policy checks and policy results in every report format.
+- Configurable ignored comparison fields through `-ignore` or a policy.
+- Batch manifests with paths resolved relative to the manifest.
+- JUnit XML output for individual and batch CI workflows.
+- Route state, metrics, local preference, AS path, communities, tags, MPLS
+  labels, and selected next-hop state in parsing and comparison.
+- Extended fixture coverage and example policy and batch files.
+
+### Changed
+
+- Report tables include next-hop type and extended route attributes.
+- Structured reports expose their effective pass/fail outcome.
+
 ## v1.1.0
 
 ### Added

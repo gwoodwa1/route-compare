@@ -12,7 +12,7 @@ import (
 )
 
 // Version is the semantic version of this release.
-const Version = "1.1.0"
+const Version = "1.2.0"
 
 // NextHop identifies one forwarding path for a route.
 type NextHop struct {
