@@ -17,14 +17,31 @@ go install github.com/gwoodwa1/route-compare/cmd/routecompare@v1.0.0
 Compare all routing tables:
 
 ```sh
-routecompare -pre pre.xml -post post.xml
+routecompare -pre testdata/fixtures/pre_1.xml -post testdata/fixtures/post_1.xml
 ```
 
 Compare selected routing tables:
 
 ```sh
-routecompare -pre pre.xml -post post.xml -vrf inet.0,inet6.0
+routecompare -pre testdata/fixtures/pre_2.xml -post testdata/fixtures/post_2.xml -vrf inet.0,inet6.0
 ```
+
+Produce a machine-readable report:
+
+```sh
+routecompare -pre testdata/fixtures/pre_1.xml -post testdata/fixtures/post_1.xml -format json
+```
+
+By default, detected changes are reported with a successful exit status. For
+automation, `-fail-on` makes a matching comparison result exit with status 2:
+
+```sh
+routecompare -pre testdata/fixtures/pre_1.xml -post testdata/fixtures/post_1.xml -fail-on any
+routecompare -pre testdata/fixtures/pre_1.xml -post testdata/fixtures/post_1.xml -fail-on removed
+```
+
+Valid policies are `none` (the default), `any`, `added`, `removed`, and
+`modified`. Execution and input errors use exit status 1.
 
 Run `routecompare -version` to print the installed version.
 
@@ -45,11 +62,11 @@ import (
 )
 
 func main() {
-	before, err := routecompare.ParseFile("pre.xml")
+	before, err := routecompare.ParseFile("testdata/fixtures/pre_1.xml")
 	if err != nil {
 		log.Fatal(err)
 	}
-	after, err := routecompare.ParseFile("post.xml")
+	after, err := routecompare.ParseFile("testdata/fixtures/post_1.xml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,8 +75,9 @@ func main() {
 		before.Routes("inet.0"),
 		after.Routes("inet.0"),
 	)
-	fmt.Printf("removed or changed: %d\n", len(diff.BeforeOnly))
-	fmt.Printf("added or changed: %d\n", len(diff.AfterOnly))
+	fmt.Printf("added: %d\n", len(diff.Added))
+	fmt.Printf("removed: %d\n", len(diff.Removed))
+	fmt.Printf("modified: %d\n", len(diff.Modified))
 }
 ```
 
@@ -70,6 +88,11 @@ func main() {
 - `Parse(io.Reader)` and `ParseFile(string)` create a `Snapshot`.
 - `(*Snapshot).Routes(...string)` returns normalized routes.
 - `(Comparator).Compare(before, after)` returns a `Difference`.
+- `Difference.Added`, `Removed`, and `Modified` classify changes. A modified
+  route has the same table and destination on both sides, with its changed
+  fields listed in `RouteChange.ChangedFields`.
+- `Difference.BeforeOnly` and `AfterOnly` remain available for compatibility
+  with v1.0 callers.
 - `(Difference).Empty()` reports whether two inputs are equivalent.
 
 ## Development
@@ -80,6 +103,15 @@ go vet ./...
 ```
 
 The package keeps XML decoding, route projection, comparison, and CLI presentation separate. Exported values are safe for callers to retain and modify without changing a parsed snapshot.
+
+## Test fixtures
+
+Example Junos snapshots are stored in `testdata/fixtures`:
+
+- `pre_1.xml` and `post_1.xml` are a small next-hop-change example.
+- `pre_2.xml` and `post_2.xml` contain IPv4, IPv6, multiple protocols,
+  ECMP, private tables, and the `blue.inet.0` VRF. The post-change snapshot
+  includes added, removed, and modified routes.
 
 ## License
 

@@ -14,19 +14,19 @@ const Version = "1.0.0"
 
 // NextHop identifies one forwarding path for a route.
 type NextHop struct {
-	To             string
-	Via            string
-	LocalInterface string
+	To             string `json:"to,omitempty"`
+	Via            string `json:"via,omitempty"`
+	LocalInterface string `json:"local_interface,omitempty"`
 }
 
 // Route is the comparison-friendly representation of a Junos route entry.
 type Route struct {
-	Destination string
-	Table       string
-	Protocol    string
-	Preference  string
-	NextHopType string
-	NextHops    []NextHop
+	Destination string    `json:"destination"`
+	Table       string    `json:"table"`
+	Protocol    string    `json:"protocol,omitempty"`
+	Preference  string    `json:"preference,omitempty"`
+	NextHopType string    `json:"next_hop_type,omitempty"`
+	NextHops    []NextHop `json:"next_hops,omitempty"`
 }
 
 // Snapshot contains the route tables parsed from one rpc-reply.
@@ -126,10 +126,33 @@ func (s *Snapshot) Routes(tableNames ...string) []Route {
 	return routes
 }
 
-// Difference holds routes found on only one side of a comparison.
+// Difference holds both the compatibility-oriented raw difference and the
+// operator-friendly classification of a comparison.
 type Difference struct {
 	BeforeOnly []Route
 	AfterOnly  []Route
+
+	// Added and Removed contain routes that exist on only one side and do not
+	// have a corresponding route with the same table and destination.
+	Added   []Route
+	Removed []Route
+
+	// Modified pairs routes with the same table and destination whose
+	// comparison-relevant attributes changed.
+	Modified []RouteChange
+
+	// Counts include exact matches, including duplicate entries.
+	BeforeCount    int
+	AfterCount     int
+	UnchangedCount int
+}
+
+// RouteChange describes a route that exists in both snapshots but whose
+// comparison-relevant attributes changed.
+type RouteChange struct {
+	Before        Route    `json:"before"`
+	After         Route    `json:"after"`
+	ChangedFields []string `json:"changed_fields"`
 }
 
 // Empty reports whether the snapshots contain equivalent routes.
@@ -141,10 +164,74 @@ type Comparator struct{}
 // Compare finds routes unique to before and after. Next-hop order is ignored,
 // while duplicate route entries are counted correctly.
 func (Comparator) Compare(before, after []Route) Difference {
-	return Difference{
-		BeforeOnly: subtract(before, after),
-		AfterOnly:  subtract(after, before),
+	beforeOnly := subtract(before, after)
+	afterOnly := subtract(after, before)
+	diff := Difference{
+		BeforeOnly:     append([]Route(nil), beforeOnly...),
+		AfterOnly:      append([]Route(nil), afterOnly...),
+		BeforeCount:    len(before),
+		AfterCount:     len(after),
+		UnchangedCount: len(before) - len(beforeOnly),
 	}
+	diff.classify(beforeOnly, afterOnly)
+	sortRoutes(diff.BeforeOnly)
+	sortRoutes(diff.AfterOnly)
+	sortRoutes(diff.Added)
+	sortRoutes(diff.Removed)
+	sort.SliceStable(diff.Modified, func(i, j int) bool {
+		return routeLess(diff.Modified[i].Before, diff.Modified[j].Before)
+	})
+	return diff
+}
+
+func (d *Difference) classify(beforeOnly, afterOnly []Route) {
+	used := make([]bool, len(afterOnly))
+	for _, before := range beforeOnly {
+		best := -1
+		bestScore := int(^uint(0) >> 1)
+		for i, after := range afterOnly {
+			if used[i] || before.Table != after.Table || before.Destination != after.Destination {
+				continue
+			}
+			fields := changedFields(before, after)
+			if len(fields) < bestScore {
+				best, bestScore = i, len(fields)
+			}
+		}
+		if best == -1 {
+			d.Removed = append(d.Removed, before)
+			continue
+		}
+		used[best] = true
+		after := afterOnly[best]
+		d.Modified = append(d.Modified, RouteChange{
+			Before:        before,
+			After:         after,
+			ChangedFields: changedFields(before, after),
+		})
+	}
+	for i, after := range afterOnly {
+		if !used[i] {
+			d.Added = append(d.Added, after)
+		}
+	}
+}
+
+func changedFields(before, after Route) []string {
+	var fields []string
+	if before.Protocol != after.Protocol {
+		fields = append(fields, "protocol")
+	}
+	if before.Preference != after.Preference {
+		fields = append(fields, "preference")
+	}
+	if before.NextHopType != after.NextHopType {
+		fields = append(fields, "next_hop_type")
+	}
+	if nextHopKey(before.NextHops) != nextHopKey(after.NextHops) {
+		fields = append(fields, "next_hops")
+	}
+	return fields
 }
 
 func subtract(left, right []Route) []Route {
@@ -165,10 +252,31 @@ func subtract(left, right []Route) []Route {
 }
 
 func (r Route) key() string {
-	hops := make([]string, len(r.NextHops))
-	for i, hop := range r.NextHops {
+	return r.Table + "\x00" + r.Destination + "\x00" + r.Protocol + "\x00" + r.Preference + "\x00" + r.NextHopType + "\x00" + nextHopKey(r.NextHops)
+}
+
+func nextHopKey(nextHops []NextHop) string {
+	hops := make([]string, len(nextHops))
+	for i, hop := range nextHops {
 		hops[i] = hop.To + "\x00" + hop.Via + "\x00" + hop.LocalInterface
 	}
 	sort.Strings(hops)
-	return r.Table + "\x00" + r.Destination + "\x00" + r.Protocol + "\x00" + r.Preference + "\x00" + r.NextHopType + "\x00" + fmt.Sprint(hops)
+	return fmt.Sprint(hops)
+}
+
+func sortRoutes(routes []Route) {
+	sort.SliceStable(routes, func(i, j int) bool { return routeLess(routes[i], routes[j]) })
+}
+
+func routeLess(left, right Route) bool {
+	if left.Table != right.Table {
+		return left.Table < right.Table
+	}
+	if left.Destination != right.Destination {
+		return left.Destination < right.Destination
+	}
+	if left.Protocol != right.Protocol {
+		return left.Protocol < right.Protocol
+	}
+	return left.key() < right.key()
 }

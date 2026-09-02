@@ -1,0 +1,484 @@
+<rpc-reply xmlns:junos="http://xml.juniper.net/junos/25.3R0/junos">
+    <route-information xmlns="http://xml.juniper.net/junos/22.3R0/junos-routing">
+        <!-- keepalive -->
+        <route-table>
+            <table-name>inet.0</table-name>
+            <destination-count>10</destination-count>
+            <total-route-count>10</total-route-count>
+            <active-route-count>10</active-route-count>
+            <holddown-route-count>0</holddown-route-count>
+            <hidden-route-count>0</hidden-route-count>
+            <rt junos:style="brief">
+                <rt-destination>172.18.0.0/24</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="177">00:10:37</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>fxp0.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>172.18.0.15/32</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Local</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="177">00:10:37</age>
+                    <nh-type>Local</nh-type>
+                    <nh>
+                        <nh-local-interface>fxp0.0</nh-local-interface>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>0.0.0.0/0</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Static</protocol-name>
+                    <preference>5</preference>
+                    <age junos:seconds="3600">01:00:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.254</to>
+                        <via>fxp0.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>10.20.0.0/16</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>OSPF</protocol-name>
+                    <preference>10</preference>
+                    <age junos:seconds="820">00:13:40</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.2</to>
+                        <via>ge-0/0/0.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>10.30.0.0/16</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>OSPF</protocol-name>
+                    <preference>10</preference>
+                    <age junos:seconds="750">00:12:30</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.2</to>
+                        <via>ge-0/0/0.0</via>
+                    </nh>
+                    <nh>
+                        <to>172.18.0.3</to>
+                        <via>ge-0/0/1.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>10.40.0.0/16</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Static</protocol-name>
+                    <preference>5</preference>
+                    <age junos:seconds="640">00:10:40</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.10</to>
+                        <via>fxp0.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>10.60.0.0/16</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>RIP</protocol-name>
+                    <preference>100</preference>
+                    <age junos:seconds="190">00:03:10</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.20</to>
+                        <via>ge-0/0/2.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>192.0.2.0/24</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>BGP</protocol-name>
+                    <preference>170</preference>
+                    <age junos:seconds="540">00:09:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.23</to>
+                        <via>ge-0/0/4.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>198.51.100.0/24</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>BGP</protocol-name>
+                    <preference>170</preference>
+                    <age junos:seconds="420">00:07:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>172.18.0.21</to>
+                        <via>ge-0/0/2.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>203.0.113.0/24</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Aggregate</protocol-name>
+                    <preference>130</preference>
+                    <age junos:seconds="2400">00:40:00</age>
+                    <nh-type>Reject</nh-type>
+                </rt-entry>
+            </rt>
+        </route-table>
+        <route-table>
+            <table-name>__juniper_private1__.inet.0</table-name>
+            <destination-count>5</destination-count>
+            <total-route-count>6</total-route-count>
+            <active-route-count>5</active-route-count>
+            <holddown-route-count>0</holddown-route-count>
+            <hidden-route-count>0</hidden-route-count>
+            <rt junos:style="brief">
+                <rt-destination>172.18.0.0/8</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>   
+                    <last-active/>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:12:42</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>em1.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>172.18.0.4/32</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Local</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh-type>Local</nh-type>
+                    <nh>
+                        <nh-local-interface>em1.0</nh-local-interface>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>128.0.0.0/2</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>em1.0</via>
+                    </nh>
+                </rt-entry>
+                <rt-entry>
+                    <active-tag> </active-tag>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>em1.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>128.0.0.1/32</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Local</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh-type>Local</nh-type>
+                    <nh>
+                        <nh-local-interface>em1.0</nh-local-interface>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>128.0.0.4/32</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Local</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh-type>Local</nh-type>
+                    <nh>
+                        <nh-local-interface>em1.0</nh-local-interface>
+                    </nh>
+                </rt-entry>
+            </rt>
+        </route-table>
+        <route-table>
+            <table-name>__juniper_private2__.inet.0</table-name>
+            <destination-count>1</destination-count>
+            <total-route-count>1</total-route-count>
+            <active-route-count>0</active-route-count>
+            <holddown-route-count>0</holddown-route-count>
+            <hidden-route-count>1</hidden-route-count>
+            <rt junos:style="brief">
+                <rt-destination>127.0.0.1/32</rt-destination>
+                <rt-entry>
+                    <active-tag> </active-tag>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>lo0.16384</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+        </route-table>
+        <route-table>
+            <table-name>inet6.0</table-name>
+            <destination-count>5</destination-count>
+            <total-route-count>5</total-route-count>
+            <active-route-count>5</active-route-count>
+            <holddown-route-count>0</holddown-route-count>
+            <hidden-route-count>0</hidden-route-count>
+            <rt junos:style="brief">
+                <rt-destination>ff02::2/128</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>INET6</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh-type>MultiRecv</nh-type>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>::/0</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Static</protocol-name>
+                    <preference>5</preference>
+                    <age junos:seconds="3600">01:00:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>fe80::ffff</to>
+                        <via>ge-0/0/0.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>2001:db8:100::/48</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>BGP</protocol-name>
+                    <preference>170</preference>
+                    <age junos:seconds="900">00:15:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>fe80::2</to>
+                        <via>ge-0/0/1.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>2001:db8:400::/64</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>OSPF3</protocol-name>
+                    <preference>10</preference>
+                    <age junos:seconds="780">00:13:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>fe80::3</to>
+                        <via>ge-0/0/2.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>2001:db8:300::/64</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Static</protocol-name>
+                    <preference>5</preference>
+                    <age junos:seconds="600">00:10:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>fe80::4</to>
+                        <via>ge-0/0/3.0</via>
+                    </nh>
+                    <nh>
+                        <to>fe80::5</to>
+                        <via>ge-0/0/4.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+        </route-table>
+        <route-table>
+            <table-name>blue.inet.0</table-name>
+            <destination-count>3</destination-count>
+            <total-route-count>3</total-route-count>
+            <active-route-count>3</active-route-count>
+            <holddown-route-count>0</holddown-route-count>
+            <hidden-route-count>0</hidden-route-count>
+            <rt junos:style="brief">
+                <rt-destination>0.0.0.0/0</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Static</protocol-name>
+                    <preference>5</preference>
+                    <age junos:seconds="1200">00:20:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>10.255.0.1</to>
+                        <via>ge-0/0/5.100</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>10.100.0.0/16</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="1200">00:20:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>ge-0/0/5.100</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>10.200.0.0/16</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>BGP</protocol-name>
+                    <preference>200</preference>
+                    <age junos:seconds="300">00:05:00</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <to>10.255.0.2</to>
+                        <via>ge-0/0/5.100</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+        </route-table>
+        <route-table>
+            <table-name>__juniper_private1__.inet6.0</table-name>
+            <destination-count>3</destination-count>
+            <total-route-count>3</total-route-count>
+            <active-route-count>3</active-route-count>
+            <holddown-route-count>0</holddown-route-count>
+            <hidden-route-count>0</hidden-route-count>
+            <rt junos:style="brief">
+                <rt-destination junos:emit="emit">fe80::5254:ff:fee0:fb01/128</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Local</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh-type>Local</nh-type>
+                    <nh>
+                        <nh-local-interface>em1.0</nh-local-interface>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>fec0::/64</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Direct</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh>
+                        <selected-next-hop/>
+                        <via>em1.0</via>
+                    </nh>
+                </rt-entry>
+            </rt>
+            <rt junos:style="brief">
+                <rt-destination>fec0::a:0:0:4/128</rt-destination>
+                <rt-entry>
+                    <active-tag>*</active-tag>
+                    <current-active/>
+                    <last-active/>
+                    <protocol-name>Local</protocol-name>
+                    <preference>0</preference>
+                    <age junos:seconds="182">00:03:02</age>
+                    <nh-type>Local</nh-type>
+                    <nh>
+                        <nh-local-interface>em1.0</nh-local-interface>
+                    </nh>
+                </rt-entry>
+            </rt>
+        </route-table>
+    </route-information>
+    <cli>
+        <banner></banner>
+    </cli>
+</rpc-reply>

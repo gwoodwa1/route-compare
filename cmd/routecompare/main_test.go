@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -33,5 +34,45 @@ func TestSplitTables(t *testing.T) {
 	}
 	if got := splitTables("ALL"); got != nil {
 		t.Fatalf("ALL = %#v, want nil", got)
+	}
+}
+
+func TestRenderJSON(t *testing.T) {
+	diff := routecompare.Difference{
+		BeforeCount:    2,
+		AfterCount:     2,
+		UnchangedCount: 1,
+		Modified: []routecompare.RouteChange{{
+			Before:        routecompare.Route{Destination: "192.0.2.0/24", Table: "inet.0", Preference: "5"},
+			After:         routecompare.Route{Destination: "192.0.2.0/24", Table: "inet.0", Preference: "10"},
+			ChangedFields: []string{"preference"},
+		}},
+	}
+	var output bytes.Buffer
+	if err := renderJSON(&output, "before.xml", "after.xml", diff); err != nil {
+		t.Fatal(err)
+	}
+	var report jsonReport
+	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.Modified != 1 || len(report.Modified) != 1 || report.Added == nil || report.Removed == nil {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+}
+
+func TestFailPolicies(t *testing.T) {
+	diff := routecompare.Difference{
+		BeforeOnly: []routecompare.Route{{Destination: "192.0.2.0/24"}},
+		Modified:   []routecompare.RouteChange{{}},
+	}
+	if !matchesFailPolicy("any", diff) || !matchesFailPolicy("modified", diff) {
+		t.Fatal("expected any and modified policies to match")
+	}
+	if matchesFailPolicy("added", diff) || matchesFailPolicy("removed", diff) || matchesFailPolicy("none", diff) {
+		t.Fatal("unexpected policy match")
+	}
+	if validFailPolicy("surprise") {
+		t.Fatal("unexpected valid fail policy")
 	}
 }
