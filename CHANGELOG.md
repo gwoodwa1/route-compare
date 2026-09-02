@@ -15,6 +15,11 @@ All notable changes to route-compare are documented here.
 - Route state, metrics, local preference, AS path, communities, tags, MPLS
   labels, and selected next-hop state in parsing and comparison.
 - Extended fixture coverage and example policy and batch files.
+- GitHub Actions for tests, race coverage, fuzzing, vulnerability scanning,
+  static analysis, CodeQL, and tag-driven releases.
+- GoReleaser cross-platform archives, checksums, CycloneDX SBOMs, and
+  draft-before-publish binary verification.
+- Grouped weekly Dependabot updates for Go modules and GitHub Actions.
 
 ### Changed
 

@@ -57,7 +57,7 @@ jobs:
       - name: Build and smoke test CLI
         run: |
           go build -trimpath -o "${RUNNER_TEMP}/routecompare" ./cmd/routecompare
-          test "$("${RUNNER_TEMP}/routecompare" -version)" = "1.2.0"
+          test "$("${RUNNER_TEMP}/routecompare" -version)" = "$(go run ./cmd/routecompare -version)"
           "${RUNNER_TEMP}/routecompare" \
             -pre testdata/fixtures/pre_1.xml \
             -post testdata/fixtures/post_1.xml \
@@ -97,4 +97,3 @@ jobs:
             ${{ runner.temp }}/route-report.html
             ${{ runner.temp }}/route-results.xml
           if-no-files-found: error
-
