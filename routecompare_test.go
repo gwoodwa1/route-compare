@@ -170,6 +170,15 @@ func TestFixtureComparisons(t *testing.T) {
 			removed:   2,
 			modified:  5,
 		},
+		{
+			name:      "large mixed route changes",
+			before:    "testdata/fixtures/pre_3.xml",
+			after:     "testdata/fixtures/post_3.xml",
+			unchanged: 49,
+			added:     1,
+			removed:   1,
+			modified:  5,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

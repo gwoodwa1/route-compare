@@ -257,6 +257,9 @@ Example Junos snapshots are stored in `testdata/fixtures`:
 - `pre_2.xml` and `post_2.xml` contain IPv4, IPv6, multiple protocols,
   ECMP, private tables, and the `blue.inet.0` VRF. The post-change snapshot
   includes added, removed, and modified routes.
+- `pre_3.xml` and `post_3.xml` provide a larger IPv4 table with static, OSPF,
+  BGP, alternate, and ECMP paths. The post-change snapshot exercises one added
+  route, one removed route, and five attribute-level modifications.
 
 ## License
 
