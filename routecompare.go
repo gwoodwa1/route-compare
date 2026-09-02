@@ -10,7 +10,7 @@ import (
 )
 
 // Version is the semantic version of this release.
-const Version = "1.0.0"
+const Version = "1.1.0"
 
 // NextHop identifies one forwarding path for a route.
 type NextHop struct {
@@ -35,9 +35,11 @@ type Snapshot struct {
 }
 
 type rpcReply struct {
-	RouteInformation struct {
-		Tables []routeTable `xml:"route-table"`
-	} `xml:"route-information"`
+	RouteInformation *routeInformation `xml:"route-information"`
+}
+
+type routeInformation struct {
+	Tables []routeTable `xml:"route-table"`
 }
 
 type routeTable struct {
@@ -73,6 +75,25 @@ func Parse(r io.Reader) (*Snapshot, error) {
 	if err := xml.NewDecoder(r).Decode(&reply); err != nil {
 		return nil, fmt.Errorf("parse route snapshot: %w", err)
 	}
+	if reply.RouteInformation == nil {
+		return nil, fmt.Errorf("parse route snapshot: route-information element not found")
+	}
+	if len(reply.RouteInformation.Tables) == 0 {
+		return nil, fmt.Errorf("parse route snapshot: no route tables found")
+	}
+	for tableIndex, table := range reply.RouteInformation.Tables {
+		if table.Name == "" {
+			return nil, fmt.Errorf("parse route snapshot: route table %d has no table-name", tableIndex+1)
+		}
+		for routeIndex, route := range table.Routes {
+			if route.Destination == "" {
+				return nil, fmt.Errorf("parse route snapshot: route %d in table %q has no destination", routeIndex+1, table.Name)
+			}
+			if len(route.Entries) == 0 {
+				return nil, fmt.Errorf("parse route snapshot: route %q in table %q has no entries", route.Destination, table.Name)
+			}
+		}
+	}
 	return &Snapshot{tables: reply.RouteInformation.Tables}, nil
 }
 
@@ -84,6 +105,45 @@ func ParseFile(name string) (*Snapshot, error) {
 	}
 	defer f.Close()
 	return Parse(f)
+}
+
+// TableNames returns the routing table names in source order. The returned
+// slice is safe for the caller to modify.
+func (s *Snapshot) TableNames() []string {
+	if s == nil {
+		return nil
+	}
+	names := make([]string, len(s.tables))
+	for i, table := range s.tables {
+		names[i] = table.Name
+	}
+	return names
+}
+
+// MissingTables returns requested routing table names not present in the
+// snapshot. Empty names and ALL are ignored.
+func (s *Snapshot) MissingTables(tableNames ...string) []string {
+	present := make(map[string]struct{})
+	if s != nil {
+		for _, table := range s.tables {
+			present[table.Name] = struct{}{}
+		}
+	}
+	var missing []string
+	seen := make(map[string]struct{})
+	for _, name := range tableNames {
+		if name == "" || name == "ALL" {
+			continue
+		}
+		if _, duplicate := seen[name]; duplicate {
+			continue
+		}
+		seen[name] = struct{}{}
+		if _, ok := present[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	return missing
 }
 
 // Routes returns a copy of the snapshot's routes. With no table names, routes
