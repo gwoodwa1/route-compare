@@ -11,7 +11,7 @@ Current release: **v1.2.0**
 
 See [CHANGELOG.md](CHANGELOG.md) for release details.
 
-Requirements: Go 1.22 or later. The module uses only the Go standard library.
+Requirements: Go 1.27.0 or later. The module uses only the Go standard library.
 
 ## Install the CLI
 

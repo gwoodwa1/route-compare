@@ -1,3 +1,3 @@
 module github.com/gwoodwa1/route-compare
 
-go 1.27
+go 1.27.0
