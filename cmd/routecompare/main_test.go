@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"os"
 	"strings"
 	"testing"
@@ -18,6 +19,14 @@ func TestRunVersion(t *testing.T) {
 	}
 	if got, want := strings.TrimSpace(stdout.String()), routecompare.Version; got != want {
 		t.Fatalf("version = %q, want %q", got, want)
+	}
+}
+
+func TestRunHelp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"-h"}, &stdout, &stderr)
+	if !errors.Is(err, flag.ErrHelp) || !strings.Contains(stderr.String(), "-batch") {
+		t.Fatalf("unexpected help result: err=%v output=%q", err, stderr.String())
 	}
 }
 
