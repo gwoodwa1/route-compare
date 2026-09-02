@@ -84,6 +84,39 @@ func TestParseRejectsInvalidXML(t *testing.T) {
 	}
 }
 
+func TestParseRejectsXMLWithoutRouteData(t *testing.T) {
+	tests := []string{
+		`<rpc-reply><system-information/></rpc-reply>`,
+		`<rpc-reply><route-information/></rpc-reply>`,
+		`<rpc-reply><route-information><route-table><rt/></route-table></route-information></rpc-reply>`,
+	}
+	for _, input := range tests {
+		if _, err := routecompare.Parse(strings.NewReader(input)); err == nil {
+			t.Fatalf("expected validation error for %s", input)
+		}
+	}
+}
+
+func TestSnapshotTableNamesAndMissingTables(t *testing.T) {
+	input := `<rpc-reply><route-information><route-table><table-name>inet.0</table-name></route-table><route-table><table-name>blue.inet.0</table-name></route-table></route-information></rpc-reply>`
+	snapshot, err := routecompare.Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := snapshot.TableNames()
+	if len(names) != 2 || names[0] != "inet.0" || names[1] != "blue.inet.0" {
+		t.Fatalf("unexpected table names: %#v", names)
+	}
+	names[0] = "changed"
+	if snapshot.TableNames()[0] != "inet.0" {
+		t.Fatal("TableNames returned internal storage")
+	}
+	missing := snapshot.MissingTables("inet.0", "red.inet.0", "red.inet.0")
+	if len(missing) != 1 || missing[0] != "red.inet.0" {
+		t.Fatalf("unexpected missing tables: %#v", missing)
+	}
+}
+
 func TestFixtureComparisons(t *testing.T) {
 	tests := []struct {
 		name                                string
