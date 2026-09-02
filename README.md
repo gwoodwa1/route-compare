@@ -146,9 +146,9 @@ docker run --rm \
   -output reports/route-report.html
 ```
 
-The runtime image uses pinned Alpine packages, contains only the compiled
-binary, CA certificates, and timezone data, and runs as the unprivileged
-`routecompare` user.
+The runtime uses a digest-pinned Alpine base with packages upgraded during the
+build, contains only the compiled binary, CA certificates, and timezone data,
+and runs as the unprivileged `routecompare` user.
 
 ## Use as a package
 
