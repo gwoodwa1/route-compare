@@ -79,6 +79,7 @@ func runBatch(manifestPath, format, output, failOn string, stdout io.Writer) err
 		if decodeErr := json.Unmarshal(jobOutput.Bytes(), &jobReport); decodeErr != nil {
 			return fmt.Errorf("batch comparison %q: decode internal report: %w", comparison.Name, decodeErr)
 		}
+		jobReport.Metadata.Comparison = comparison.Name
 		if jobReport.Failed {
 			failed = true
 		}
@@ -179,7 +180,7 @@ type junitBatchSuite struct {
 func renderBatchJUnit(w io.Writer, result batchReport) error {
 	suite := junitBatchSuite{Name: "routecompare-batch", Tests: len(result.Reports), Time: "0"}
 	for _, report := range result.Reports {
-		name := firstNonEmpty(report.Metadata.Device, report.Before.Path+" -> "+report.After.Path)
+		name := firstNonEmpty(report.Metadata.Comparison, report.Metadata.Device, report.Before.Path+" -> "+report.After.Path)
 		details := "before=" + strconv.Itoa(report.Summary.Before) + " after=" + strconv.Itoa(report.Summary.After) + " added=" + strconv.Itoa(report.Summary.Added) + " removed=" + strconv.Itoa(report.Summary.Removed) + " modified=" + strconv.Itoa(report.Summary.Modified)
 		testCase := junitTestCase{Name: name, ClassName: "routecompare", SystemOut: details}
 		if report.Failed {

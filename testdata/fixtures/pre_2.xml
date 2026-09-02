@@ -130,11 +130,18 @@
                     <last-active/>
                     <protocol-name>BGP</protocol-name>
                     <preference>170</preference>
+                    <metric>20</metric>
+                    <local-preference>100</local-preference>
+                    <as-path>64500 64510 I</as-path>
+                    <communities>
+                        <community>64500:100</community>
+                    </communities>
                     <age junos:seconds="540">00:09:00</age>
                     <nh>
                         <selected-next-hop/>
                         <to>172.18.0.21</to>
                         <via>ge-0/0/2.0</via>
+                        <mpls-label>Push 100</mpls-label>
                     </nh>
                 </rt-entry>
             </rt>
