@@ -137,6 +137,21 @@ func TestMarkdownAndHTMLReports(t *testing.T) {
 	}
 }
 
+func TestJUnitReport(t *testing.T) {
+	result := report{
+		Metadata: reportMetadata{Device: "edge-01"},
+		Summary:  reportSummary{Before: 10, After: 9, Removed: 1},
+		Failed:   true,
+	}
+	var output bytes.Buffer
+	if err := renderJUnit(&output, result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), `failures="1"`) || !strings.Contains(output.String(), `<failure message="route comparison failed"`) {
+		t.Fatalf("unexpected JUnit report: %s", output.String())
+	}
+}
+
 func TestRunRejectsMissingTable(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := run([]string{
