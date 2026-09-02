@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // Version is the semantic version of this release.
@@ -17,16 +19,26 @@ type NextHop struct {
 	To             string `json:"to,omitempty"`
 	Via            string `json:"via,omitempty"`
 	LocalInterface string `json:"local_interface,omitempty"`
+	Label          string `json:"label,omitempty"`
+	Selected       bool   `json:"selected,omitempty"`
 }
 
 // Route is the comparison-friendly representation of a Junos route entry.
 type Route struct {
-	Destination string    `json:"destination"`
-	Table       string    `json:"table"`
-	Protocol    string    `json:"protocol,omitempty"`
-	Preference  string    `json:"preference,omitempty"`
-	NextHopType string    `json:"next_hop_type,omitempty"`
-	NextHops    []NextHop `json:"next_hops,omitempty"`
+	Destination     string    `json:"destination"`
+	Table           string    `json:"table"`
+	Protocol        string    `json:"protocol,omitempty"`
+	Preference      string    `json:"preference,omitempty"`
+	NextHopType     string    `json:"next_hop_type,omitempty"`
+	NextHops        []NextHop `json:"next_hops,omitempty"`
+	Active          bool      `json:"active,omitempty"`
+	Hidden          bool      `json:"hidden,omitempty"`
+	Metric          string    `json:"metric,omitempty"`
+	Metric2         string    `json:"metric2,omitempty"`
+	LocalPreference string    `json:"local_preference,omitempty"`
+	ASPath          string    `json:"as_path,omitempty"`
+	Communities     []string  `json:"communities,omitempty"`
+	Tag             string    `json:"tag,omitempty"`
 }
 
 // Snapshot contains the route tables parsed from one rpc-reply.
@@ -53,16 +65,26 @@ type xmlRoute struct {
 }
 
 type xmlEntry struct {
-	Protocol    string       `xml:"protocol-name"`
-	Preference  string       `xml:"preference"`
-	NextHopType string       `xml:"nh-type"`
-	NextHops    []xmlNextHop `xml:"nh"`
+	Protocol        string       `xml:"protocol-name"`
+	Preference      string       `xml:"preference"`
+	NextHopType     string       `xml:"nh-type"`
+	NextHops        []xmlNextHop `xml:"nh"`
+	CurrentActive   *struct{}    `xml:"current-active"`
+	Hidden          *struct{}    `xml:"hidden"`
+	Metric          string       `xml:"metric"`
+	Metric2         string       `xml:"metric2"`
+	LocalPreference string       `xml:"local-preference"`
+	ASPath          string       `xml:"as-path"`
+	Communities     []string     `xml:"communities>community"`
+	Tag             string       `xml:"tag"`
 }
 
 type xmlNextHop struct {
-	To             string `xml:"to"`
-	Via            string `xml:"via"`
-	LocalInterface string `xml:"nh-local-interface"`
+	To             string    `xml:"to"`
+	Via            string    `xml:"via"`
+	LocalInterface string    `xml:"nh-local-interface"`
+	Label          string    `xml:"mpls-label"`
+	Selected       *struct{} `xml:"selected-next-hop"`
 }
 
 // Parse reads a Junos XML rpc-reply. The reader is not closed by Parse.
@@ -169,15 +191,23 @@ func (s *Snapshot) Routes(tableNames ...string) []Route {
 		for _, candidate := range table.Routes {
 			for _, entry := range candidate.Entries {
 				route := Route{
-					Destination: candidate.Destination,
-					Table:       table.Name,
-					Protocol:    entry.Protocol,
-					Preference:  entry.Preference,
-					NextHopType: entry.NextHopType,
-					NextHops:    make([]NextHop, len(entry.NextHops)),
+					Destination:     candidate.Destination,
+					Table:           table.Name,
+					Protocol:        entry.Protocol,
+					Preference:      entry.Preference,
+					NextHopType:     entry.NextHopType,
+					NextHops:        make([]NextHop, len(entry.NextHops)),
+					Active:          entry.CurrentActive != nil,
+					Hidden:          entry.Hidden != nil,
+					Metric:          entry.Metric,
+					Metric2:         entry.Metric2,
+					LocalPreference: entry.LocalPreference,
+					ASPath:          entry.ASPath,
+					Communities:     append([]string(nil), entry.Communities...),
+					Tag:             entry.Tag,
 				}
 				for i, hop := range entry.NextHops {
-					route.NextHops[i] = NextHop{To: hop.To, Via: hop.Via, LocalInterface: hop.LocalInterface}
+					route.NextHops[i] = NextHop{To: hop.To, Via: hop.Via, LocalInterface: hop.LocalInterface, Label: hop.Label, Selected: hop.Selected != nil}
 				}
 				routes = append(routes, route)
 			}
@@ -218,14 +248,19 @@ type RouteChange struct {
 // Empty reports whether the snapshots contain equivalent routes.
 func (d Difference) Empty() bool { return len(d.BeforeOnly) == 0 && len(d.AfterOnly) == 0 }
 
-// Comparator compares route snapshots. It is stateless and safe for concurrent use.
-type Comparator struct{}
+// Comparator compares route snapshots. IgnoreFields may contain protocol,
+// preference, next_hop_type, next_hops, active, hidden, metric, metric2,
+// local_preference, as_path, communities, or tag. It is safe for concurrent
+// use when its configuration is not mutated.
+type Comparator struct {
+	IgnoreFields []string
+}
 
 // Compare finds routes unique to before and after. Next-hop order is ignored,
 // while duplicate route entries are counted correctly.
-func (Comparator) Compare(before, after []Route) Difference {
-	beforeOnly := subtract(before, after)
-	afterOnly := subtract(after, before)
+func (c Comparator) Compare(before, after []Route) Difference {
+	beforeOnly := subtract(before, after, c.routeKey)
+	afterOnly := subtract(after, before, c.routeKey)
 	diff := Difference{
 		BeforeOnly:     append([]Route(nil), beforeOnly...),
 		AfterOnly:      append([]Route(nil), afterOnly...),
@@ -233,7 +268,7 @@ func (Comparator) Compare(before, after []Route) Difference {
 		AfterCount:     len(after),
 		UnchangedCount: len(before) - len(beforeOnly),
 	}
-	diff.classify(beforeOnly, afterOnly)
+	c.classify(&diff, beforeOnly, afterOnly)
 	sortRoutes(diff.BeforeOnly)
 	sortRoutes(diff.AfterOnly)
 	sortRoutes(diff.Added)
@@ -244,7 +279,7 @@ func (Comparator) Compare(before, after []Route) Difference {
 	return diff
 }
 
-func (d *Difference) classify(beforeOnly, afterOnly []Route) {
+func (c Comparator) classify(d *Difference, beforeOnly, afterOnly []Route) {
 	used := make([]bool, len(afterOnly))
 	for _, before := range beforeOnly {
 		best := -1
@@ -253,7 +288,7 @@ func (d *Difference) classify(beforeOnly, afterOnly []Route) {
 			if used[i] || before.Table != after.Table || before.Destination != after.Destination {
 				continue
 			}
-			fields := changedFields(before, after)
+			fields := c.changedFields(before, after)
 			if len(fields) < bestScore {
 				best, bestScore = i, len(fields)
 			}
@@ -267,7 +302,7 @@ func (d *Difference) classify(beforeOnly, afterOnly []Route) {
 		d.Modified = append(d.Modified, RouteChange{
 			Before:        before,
 			After:         after,
-			ChangedFields: changedFields(before, after),
+			ChangedFields: c.changedFields(before, after),
 		})
 	}
 	for i, after := range afterOnly {
@@ -277,33 +312,57 @@ func (d *Difference) classify(beforeOnly, afterOnly []Route) {
 	}
 }
 
-func changedFields(before, after Route) []string {
+func (c Comparator) changedFields(before, after Route) []string {
 	var fields []string
-	if before.Protocol != after.Protocol {
+	if !c.ignores("protocol") && before.Protocol != after.Protocol {
 		fields = append(fields, "protocol")
 	}
-	if before.Preference != after.Preference {
+	if !c.ignores("preference") && before.Preference != after.Preference {
 		fields = append(fields, "preference")
 	}
-	if before.NextHopType != after.NextHopType {
+	if !c.ignores("next_hop_type") && before.NextHopType != after.NextHopType {
 		fields = append(fields, "next_hop_type")
 	}
-	if nextHopKey(before.NextHops) != nextHopKey(after.NextHops) {
+	if !c.ignores("next_hops") && nextHopKey(before.NextHops) != nextHopKey(after.NextHops) {
 		fields = append(fields, "next_hops")
+	}
+	if !c.ignores("active") && before.Active != after.Active {
+		fields = append(fields, "active")
+	}
+	if !c.ignores("hidden") && before.Hidden != after.Hidden {
+		fields = append(fields, "hidden")
+	}
+	if !c.ignores("metric") && before.Metric != after.Metric {
+		fields = append(fields, "metric")
+	}
+	if !c.ignores("metric2") && before.Metric2 != after.Metric2 {
+		fields = append(fields, "metric2")
+	}
+	if !c.ignores("local_preference") && before.LocalPreference != after.LocalPreference {
+		fields = append(fields, "local_preference")
+	}
+	if !c.ignores("as_path") && before.ASPath != after.ASPath {
+		fields = append(fields, "as_path")
+	}
+	if !c.ignores("communities") && stringSliceKey(before.Communities) != stringSliceKey(after.Communities) {
+		fields = append(fields, "communities")
+	}
+	if !c.ignores("tag") && before.Tag != after.Tag {
+		fields = append(fields, "tag")
 	}
 	return fields
 }
 
-func subtract(left, right []Route) []Route {
+func subtract(left, right []Route, key func(Route) string) []Route {
 	counts := make(map[string]int, len(right))
 	for _, route := range right {
-		counts[route.key()]++
+		counts[key(route)]++
 	}
 	var unique []Route
 	for _, route := range left {
-		key := route.key()
-		if counts[key] > 0 {
-			counts[key]--
+		routeKey := key(route)
+		if counts[routeKey] > 0 {
+			counts[routeKey]--
 			continue
 		}
 		unique = append(unique, route)
@@ -312,16 +371,57 @@ func subtract(left, right []Route) []Route {
 }
 
 func (r Route) key() string {
-	return r.Table + "\x00" + r.Destination + "\x00" + r.Protocol + "\x00" + r.Preference + "\x00" + r.NextHopType + "\x00" + nextHopKey(r.NextHops)
+	return (Comparator{}).routeKey(r)
+}
+
+func (c Comparator) routeKey(r Route) string {
+	values := []string{r.Table, r.Destination}
+	fields := []struct {
+		name, value string
+	}{
+		{"protocol", r.Protocol},
+		{"preference", r.Preference},
+		{"next_hop_type", r.NextHopType},
+		{"next_hops", nextHopKey(r.NextHops)},
+		{"active", strconv.FormatBool(r.Active)},
+		{"hidden", strconv.FormatBool(r.Hidden)},
+		{"metric", r.Metric},
+		{"metric2", r.Metric2},
+		{"local_preference", r.LocalPreference},
+		{"as_path", r.ASPath},
+		{"communities", stringSliceKey(r.Communities)},
+		{"tag", r.Tag},
+	}
+	for _, field := range fields {
+		if !c.ignores(field.name) {
+			values = append(values, field.value)
+		}
+	}
+	return strings.Join(values, "\x00")
+}
+
+func (c Comparator) ignores(field string) bool {
+	for _, ignored := range c.IgnoreFields {
+		if strings.EqualFold(strings.TrimSpace(ignored), field) {
+			return true
+		}
+	}
+	return false
 }
 
 func nextHopKey(nextHops []NextHop) string {
 	hops := make([]string, len(nextHops))
 	for i, hop := range nextHops {
-		hops[i] = hop.To + "\x00" + hop.Via + "\x00" + hop.LocalInterface
+		hops[i] = hop.To + "\x00" + hop.Via + "\x00" + hop.LocalInterface + "\x00" + hop.Label + "\x00" + strconv.FormatBool(hop.Selected)
 	}
 	sort.Strings(hops)
 	return fmt.Sprint(hops)
+}
+
+func stringSliceKey(values []string) string {
+	copyOfValues := append([]string(nil), values...)
+	sort.Strings(copyOfValues)
+	return strings.Join(copyOfValues, "\x00")
 }
 
 func sortRoutes(routes []Route) {

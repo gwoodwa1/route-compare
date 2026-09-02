@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -166,5 +167,48 @@ func TestRunWritesMarkdownFile(t *testing.T) {
 	}
 	if stdout.Len() != 0 || !strings.Contains(string(data), "edge-01") {
 		t.Fatalf("unexpected report output: stdout=%q report=%q", stdout.String(), data)
+	}
+}
+
+func TestLoadAndEvaluatePolicy(t *testing.T) {
+	policy, err := loadPolicy("../../testdata/policies/maintenance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Name != "standard-maintenance" || policy.MaxModified == nil || *policy.MaxModified != 3 {
+		t.Fatalf("unexpected policy: %#v", policy)
+	}
+	diff := routecompare.Difference{
+		Modified: []routecompare.RouteChange{{
+			Before: routecompare.Route{Destination: "192.0.2.0/24", Table: "inet.0"},
+		}},
+	}
+	result, err := evaluatePolicy(policy, diff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Passed || len(result.Violations) != 1 || !strings.Contains(result.Violations[0], "critical prefix") {
+		t.Fatalf("unexpected policy evaluation: %#v", result)
+	}
+}
+
+func TestRunUsesPolicyAndReturnsDifferenceError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{
+		"-pre", "../../testdata/fixtures/pre_2.xml",
+		"-post", "../../testdata/fixtures/post_2.xml",
+		"-policy", "../../testdata/policies/maintenance.json",
+		"-format", "json",
+	}, &stdout, &stderr)
+	var differenceErr differenceFoundError
+	if !errors.As(err, &differenceErr) {
+		t.Fatalf("expected policy difference error, got %v", err)
+	}
+	var result report
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Policy == nil || result.Policy.Passed || result.Policy.Name != "standard-maintenance" {
+		t.Fatalf("unexpected policy report: %#v", result.Policy)
 	}
 }

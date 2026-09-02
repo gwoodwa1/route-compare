@@ -1,0 +1,12 @@
+{
+  "name": "standard-maintenance",
+  "tables": ["inet.0", "inet6.0"],
+  "protocols": ["BGP", "OSPF", "OSPF3", "Static"],
+  "prefixes": ["0.0.0.0/0", "::/0"],
+  "ignore_fields": ["metric2"],
+  "fail_on": "none",
+  "max_added": 2,
+  "max_removed": 2,
+  "max_modified": 3,
+  "critical_prefixes": ["192.0.2.0/24", "2001:db8:100::/48"]
+}

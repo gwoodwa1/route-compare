@@ -39,6 +39,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	protocol := flags.String("protocol", "ALL", "comma-separated protocols, or ALL")
 	prefix := flags.String("prefix", "ALL", "comma-separated covering IP prefixes, or ALL")
 	changeType := flags.String("change-type", "ALL", "display added, removed, modified, or ALL")
+	ignore := flags.String("ignore", "", "comma-separated route fields to ignore during comparison")
+	policyPath := flags.String("policy", "", "JSON comparison policy file")
 	format := flags.String("format", "text", "output format: text, json, markdown, or html")
 	output := flags.String("output", "", "write the report to a file instead of stdout")
 	device := flags.String("device", "", "device name to include in report metadata")
@@ -54,6 +56,34 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	if *pre == "" || *post == "" {
 		return fmt.Errorf("both -pre and -post are required")
+	}
+	explicit := make(map[string]bool)
+	flags.Visit(func(flag *flag.Flag) { explicit[flag.Name] = true })
+	var loadedPolicy *comparisonPolicy
+	if *policyPath != "" {
+		var err error
+		loadedPolicy, err = loadPolicy(*policyPath)
+		if err != nil {
+			return err
+		}
+		if !explicit["vrf"] && len(loadedPolicy.Tables) > 0 {
+			*vrf = strings.Join(loadedPolicy.Tables, ",")
+		}
+		if !explicit["protocol"] && len(loadedPolicy.Protocols) > 0 {
+			*protocol = strings.Join(loadedPolicy.Protocols, ",")
+		}
+		if !explicit["prefix"] && len(loadedPolicy.Prefixes) > 0 {
+			*prefix = strings.Join(loadedPolicy.Prefixes, ",")
+		}
+		if !explicit["change-type"] && len(loadedPolicy.ChangeTypes) > 0 {
+			*changeType = strings.Join(loadedPolicy.ChangeTypes, ",")
+		}
+		if !explicit["ignore"] && len(loadedPolicy.IgnoreFields) > 0 {
+			*ignore = strings.Join(loadedPolicy.IgnoreFields, ",")
+		}
+		if !explicit["fail-on"] && loadedPolicy.FailOn != "" {
+			*failOn = loadedPolicy.FailOn
+		}
 	}
 	outputFormat := strings.ToLower(strings.TrimSpace(*format))
 	if !validOutputFormat(outputFormat) {
@@ -89,9 +119,17 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("routing table(s) not found in post-change snapshot: %s", strings.Join(missing, ", "))
 	}
 	protocols := splitList(*protocol, false)
+	ignoreFields := splitList(*ignore, true)
+	if err := validateIgnoreFields(ignoreFields); err != nil {
+		return err
+	}
 	beforeRoutes := filterRoutes(before.Routes(tables...), protocols, prefixes)
 	afterRoutes := filterRoutes(after.Routes(tables...), protocols, prefixes)
-	diff := (routecompare.Comparator{}).Compare(beforeRoutes, afterRoutes)
+	diff := (routecompare.Comparator{IgnoreFields: ignoreFields}).Compare(beforeRoutes, afterRoutes)
+	policyResult, err := evaluatePolicy(loadedPolicy, diff)
+	if err != nil {
+		return err
+	}
 	report := buildReport(
 		reportMetadata{
 			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
@@ -102,13 +140,15 @@ func run(args []string, stdout, stderr io.Writer) error {
 		beforeInput,
 		afterInput,
 		reportFilters{
-			Tables:      nonNilStrings(tables),
-			Protocols:   nonNilStrings(protocols),
-			Prefixes:    nonNilStrings(prefixNames),
-			ChangeTypes: nonNilStrings(changeTypes),
+			Tables:       nonNilStrings(tables),
+			Protocols:    nonNilStrings(protocols),
+			Prefixes:     nonNilStrings(prefixNames),
+			ChangeTypes:  nonNilStrings(changeTypes),
+			IgnoreFields: nonNilStrings(ignoreFields),
 		},
 		diff,
 	)
+	report.Policy = policyResult
 	reportWriter := stdout
 	var outputFile *os.File
 	if *output != "" {
@@ -129,8 +169,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("close report %q: %w", *output, err)
 		}
 	}
-	if matchesFailPolicy(policy, diff) {
-		return differenceFoundError{policy: policy}
+	if (policyResult != nil && !policyResult.Passed) || matchesFailPolicy(policy, diff) {
+		reason := policy
+		if policyResult != nil && !policyResult.Passed {
+			reason = policyResult.Name
+		}
+		return differenceFoundError{policy: reason}
 	}
 	return nil
 }

@@ -78,6 +78,37 @@ func TestCompareReturnsDeterministicOrder(t *testing.T) {
 	}
 }
 
+func TestParseExtendedRouteAttributes(t *testing.T) {
+	input := `<rpc-reply><route-information><route-table><table-name>inet.0</table-name><rt><rt-destination>192.0.2.0/24</rt-destination><rt-entry><current-active/><protocol-name>BGP</protocol-name><preference>170</preference><metric>20</metric><metric2>30</metric2><local-preference>200</local-preference><as-path>64500 64501 I</as-path><communities><community>64500:100</community><community>64500:200</community></communities><tag>42</tag><nh><selected-next-hop/><to>198.51.100.1</to><via>ge-0/0/0.0</via><mpls-label>Push 100</mpls-label></nh></rt-entry></rt></route-table></route-information></rpc-reply>`
+	snapshot, err := routecompare.Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	route := snapshot.Routes()[0]
+	if !route.Active || route.Metric != "20" || route.Metric2 != "30" || route.LocalPreference != "200" || route.ASPath != "64500 64501 I" || route.Tag != "42" {
+		t.Fatalf("unexpected extended attributes: %#v", route)
+	}
+	if len(route.Communities) != 2 || !route.NextHops[0].Selected || route.NextHops[0].Label != "Push 100" {
+		t.Fatalf("unexpected communities or next hop: %#v", route)
+	}
+}
+
+func TestComparatorIgnoreFields(t *testing.T) {
+	before := routecompare.Route{Destination: "192.0.2.0/24", Table: "inet.0", Protocol: "BGP", Preference: "170", Metric: "10"}
+	after := before
+	after.Preference = "200"
+	after.Metric = "20"
+
+	diff := (routecompare.Comparator{IgnoreFields: []string{"preference"}}).Compare([]routecompare.Route{before}, []routecompare.Route{after})
+	if len(diff.Modified) != 1 || len(diff.Modified[0].ChangedFields) != 1 || diff.Modified[0].ChangedFields[0] != "metric" {
+		t.Fatalf("unexpected ignored-field comparison: %#v", diff)
+	}
+	diff = (routecompare.Comparator{IgnoreFields: []string{"preference", "metric"}}).Compare([]routecompare.Route{before}, []routecompare.Route{after})
+	if !diff.Empty() || diff.UnchangedCount != 1 {
+		t.Fatalf("ignored fields still produced a difference: %#v", diff)
+	}
+}
+
 func TestParseRejectsInvalidXML(t *testing.T) {
 	if _, err := routecompare.Parse(strings.NewReader(`<rpc-reply>`)); err == nil {
 		t.Fatal("expected malformed XML error")

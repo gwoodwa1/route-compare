@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"html/template"
 	"io"
@@ -16,6 +17,8 @@ type report struct {
 	Before   inputMetadata              `json:"before"`
 	After    inputMetadata              `json:"after"`
 	Filters  reportFilters              `json:"filters"`
+	Policy   *policyEvaluation          `json:"policy,omitempty"`
+	Failed   bool                       `json:"failed"`
 	Summary  reportSummary              `json:"summary"`
 	Added    []routecompare.Route       `json:"added"`
 	Removed  []routecompare.Route       `json:"removed"`
@@ -35,10 +38,11 @@ type inputMetadata struct {
 }
 
 type reportFilters struct {
-	Tables      []string `json:"tables"`
-	Protocols   []string `json:"protocols"`
-	Prefixes    []string `json:"prefixes"`
-	ChangeTypes []string `json:"change_types"`
+	Tables       []string `json:"tables"`
+	Protocols    []string `json:"protocols"`
+	Prefixes     []string `json:"prefixes"`
+	ChangeTypes  []string `json:"change_types"`
+	IgnoreFields []string `json:"ignore_fields"`
 }
 
 type reportSummary struct {
@@ -103,8 +107,18 @@ func renderText(w io.Writer, result report) {
 	if result.Metadata.ChangeID != "" {
 		fmt.Fprintf(w, "Change ID: %s\n", result.Metadata.ChangeID)
 	}
-	if len(result.Filters.Tables)+len(result.Filters.Protocols)+len(result.Filters.Prefixes)+len(result.Filters.ChangeTypes) > 0 {
-		fmt.Fprintf(w, "Filters:   tables=%s protocols=%s prefixes=%s change-types=%s\n", displayFilter(result.Filters.Tables), displayFilter(result.Filters.Protocols), displayFilter(result.Filters.Prefixes), displayFilter(result.Filters.ChangeTypes))
+	if len(result.Filters.Tables)+len(result.Filters.Protocols)+len(result.Filters.Prefixes)+len(result.Filters.ChangeTypes)+len(result.Filters.IgnoreFields) > 0 {
+		fmt.Fprintf(w, "Filters:   tables=%s protocols=%s prefixes=%s change-types=%s ignored-fields=%s\n", displayFilter(result.Filters.Tables), displayFilter(result.Filters.Protocols), displayFilter(result.Filters.Prefixes), displayFilter(result.Filters.ChangeTypes), displayFilter(result.Filters.IgnoreFields))
+	}
+	if result.Policy != nil {
+		status := "PASS"
+		if !result.Policy.Passed {
+			status = "FAIL"
+		}
+		fmt.Fprintf(w, "Policy:    %s (%s)\n", result.Policy.Name, status)
+		for _, violation := range result.Policy.Violations {
+			fmt.Fprintf(w, "  ! %s\n", violation)
+		}
 	}
 	fmt.Fprintln(w, "\nSUMMARY")
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
@@ -127,9 +141,9 @@ func renderTextRoutes(w io.Writer, title string, routes []routecompare.Route) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "DESTINATION\tNEXT HOPS\tPROTOCOL\tPREFERENCE\tTABLE")
+	fmt.Fprintln(tw, "DESTINATION\tNEXT HOPS\tTYPE\tPROTOCOL\tPREFERENCE\tTABLE")
 	for _, route := range routes {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", route.Destination, formatNextHops(route.NextHops), route.Protocol, route.Preference, route.Table)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", route.Destination, formatNextHops(route.NextHops), route.NextHopType, route.Protocol, route.Preference, route.Table)
 	}
 	_ = tw.Flush()
 }
@@ -138,8 +152,8 @@ func renderTextModified(w io.Writer, changes []routecompare.RouteChange) {
 	fmt.Fprintf(w, "\nMODIFIED (%d)\n", len(changes))
 	for _, change := range changes {
 		fmt.Fprintf(w, "%s  %s  %s\n", change.Before.Destination, change.Before.Table, strings.Join(change.ChangedFields, ", "))
-		fmt.Fprintf(w, "  before: protocol=%s preference=%s next-hops=%s\n", change.Before.Protocol, change.Before.Preference, formatNextHops(change.Before.NextHops))
-		fmt.Fprintf(w, "  after:  protocol=%s preference=%s next-hops=%s\n", change.After.Protocol, change.After.Preference, formatNextHops(change.After.NextHops))
+		fmt.Fprintf(w, "  before: protocol=%s preference=%s type=%s next-hops=%s\n", change.Before.Protocol, change.Before.Preference, change.Before.NextHopType, formatNextHops(change.Before.NextHops))
+		fmt.Fprintf(w, "  after:  protocol=%s preference=%s type=%s next-hops=%s\n", change.After.Protocol, change.After.Preference, change.After.NextHopType, formatNextHops(change.After.NextHops))
 	}
 }
 
@@ -148,6 +162,64 @@ func renderJSON(w io.Writer, result report) error {
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(result); err != nil {
 		return fmt.Errorf("write JSON report: %w", err)
+	}
+	return nil
+}
+
+type junitTestSuite struct {
+	XMLName  xml.Name      `xml:"testsuite"`
+	Name     string        `xml:"name,attr"`
+	Tests    int           `xml:"tests,attr"`
+	Failures int           `xml:"failures,attr"`
+	Time     string        `xml:"time,attr"`
+	TestCase junitTestCase `xml:"testcase"`
+}
+
+type junitTestCase struct {
+	Name      string        `xml:"name,attr"`
+	ClassName string        `xml:"classname,attr,omitempty"`
+	Failure   *junitFailure `xml:"failure,omitempty"`
+	SystemOut string        `xml:"system-out"`
+}
+
+type junitFailure struct {
+	Message string `xml:"message,attr"`
+	Body    string `xml:",chardata"`
+}
+
+func renderJUnit(w io.Writer, result report) error {
+	name := result.Metadata.Device
+	if name == "" {
+		name = result.Before.Path + " -> " + result.After.Path
+	}
+	details := fmt.Sprintf("before=%d after=%d unchanged=%d added=%d removed=%d modified=%d", result.Summary.Before, result.Summary.After, result.Summary.Unchanged, result.Summary.Added, result.Summary.Removed, result.Summary.Modified)
+	suite := junitTestSuite{
+		Name:  "routecompare",
+		Tests: 1,
+		Time:  "0",
+		TestCase: junitTestCase{
+			Name:      name,
+			ClassName: "routecompare",
+			SystemOut: details,
+		},
+	}
+	if result.Failed {
+		suite.Failures = 1
+		message := "route comparison failed"
+		body := details
+		if result.Policy != nil && !result.Policy.Passed {
+			message = "policy " + result.Policy.Name + " failed"
+			body = strings.Join(result.Policy.Violations, "\n")
+		}
+		suite.TestCase.Failure = &junitFailure{Message: message, Body: body}
+	}
+	if _, err := io.WriteString(w, xml.Header); err != nil {
+		return fmt.Errorf("write JUnit report: %w", err)
+	}
+	encoder := xml.NewEncoder(w)
+	encoder.Indent("", "  ")
+	if err := encoder.Encode(suite); err != nil {
+		return fmt.Errorf("write JUnit report: %w", err)
 	}
 	return nil
 }
@@ -168,7 +240,17 @@ func renderMarkdown(w io.Writer, result report) error {
 	if result.Metadata.ChangeID != "" {
 		fmt.Fprintf(w, "**Change ID:** %s  \n", markdownEscape(result.Metadata.ChangeID))
 	}
-	fmt.Fprintf(w, "**Filters:** tables=%s; protocols=%s; prefixes=%s; change types=%s  \n", markdownEscape(displayFilter(result.Filters.Tables)), markdownEscape(displayFilter(result.Filters.Protocols)), markdownEscape(displayFilter(result.Filters.Prefixes)), markdownEscape(displayFilter(result.Filters.ChangeTypes)))
+	fmt.Fprintf(w, "**Filters:** tables=%s; protocols=%s; prefixes=%s; change types=%s; ignored fields=%s  \n", markdownEscape(displayFilter(result.Filters.Tables)), markdownEscape(displayFilter(result.Filters.Protocols)), markdownEscape(displayFilter(result.Filters.Prefixes)), markdownEscape(displayFilter(result.Filters.ChangeTypes)), markdownEscape(displayFilter(result.Filters.IgnoreFields)))
+	if result.Policy != nil {
+		status := "PASS"
+		if !result.Policy.Passed {
+			status = "FAIL"
+		}
+		fmt.Fprintf(w, "**Policy:** %s — %s  \n", markdownEscape(result.Policy.Name), status)
+		for _, violation := range result.Policy.Violations {
+			fmt.Fprintf(w, "- ⚠ %s\n", markdownEscape(violation))
+		}
+	}
 	fmt.Fprintln(w, "\n## Summary")
 	fmt.Fprintln(w, "\n| Before | After | Unchanged | Added | Removed | Modified |")
 	fmt.Fprintln(w, "| ---: | ---: | ---: | ---: | ---: | ---: |")
@@ -179,10 +261,10 @@ func renderMarkdown(w io.Writer, result report) error {
 	for _, change := range result.Modified {
 		fmt.Fprintf(w, "\n### `%s` — %s\n", markdownEscape(change.Before.Destination), markdownEscape(change.Before.Table))
 		fmt.Fprintf(w, "\nChanged fields: %s\n", markdownEscape(strings.Join(change.ChangedFields, ", ")))
-		fmt.Fprintln(w, "\n| | Protocol | Preference | Next hops |")
-		fmt.Fprintln(w, "| --- | --- | --- | --- |")
-		fmt.Fprintf(w, "| Before | %s | %s | %s |\n", markdownEscape(change.Before.Protocol), markdownEscape(change.Before.Preference), markdownEscape(formatNextHops(change.Before.NextHops)))
-		fmt.Fprintf(w, "| After | %s | %s | %s |\n", markdownEscape(change.After.Protocol), markdownEscape(change.After.Preference), markdownEscape(formatNextHops(change.After.NextHops)))
+		fmt.Fprintln(w, "\n| | Protocol | Preference | Next-hop type | Next hops |")
+		fmt.Fprintln(w, "| --- | --- | --- | --- | --- |")
+		fmt.Fprintf(w, "| Before | %s | %s | %s | %s |\n", markdownEscape(change.Before.Protocol), markdownEscape(change.Before.Preference), markdownEscape(change.Before.NextHopType), markdownEscape(formatNextHops(change.Before.NextHops)))
+		fmt.Fprintf(w, "| After | %s | %s | %s | %s |\n", markdownEscape(change.After.Protocol), markdownEscape(change.After.Preference), markdownEscape(change.After.NextHopType), markdownEscape(formatNextHops(change.After.NextHops)))
 	}
 	fmt.Fprintln(w, "\n---")
 	fmt.Fprintf(w, "Generated by routecompare %s. Input SHA-256: `%s` / `%s`.\n", result.Metadata.ToolVersion, result.Before.SHA256, result.After.SHA256)
@@ -194,10 +276,10 @@ func renderMarkdownRoutes(w io.Writer, title string, routes []routecompare.Route
 	if len(routes) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "\n| Destination | Table | Protocol | Preference | Next hops |")
-	fmt.Fprintln(w, "| --- | --- | --- | ---: | --- |")
+	fmt.Fprintln(w, "\n| Destination | Table | Protocol | Preference | Next-hop type | Next hops |")
+	fmt.Fprintln(w, "| --- | --- | --- | ---: | --- | --- |")
 	for _, route := range routes {
-		fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n", markdownEscape(route.Destination), markdownEscape(route.Table), markdownEscape(route.Protocol), markdownEscape(route.Preference), markdownEscape(formatNextHops(route.NextHops)))
+		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s |\n", markdownEscape(route.Destination), markdownEscape(route.Table), markdownEscape(route.Protocol), markdownEscape(route.Preference), markdownEscape(route.NextHopType), markdownEscape(formatNextHops(route.NextHops)))
 	}
 }
 
@@ -220,14 +302,15 @@ var htmlReportTemplate = template.Must(template.New("report").Funcs(template.Fun
 </style>
 </head>
 <body><main class="wrap">
-<header><div><h1>Route comparison report</h1><div class="muted">Generated {{.Metadata.GeneratedAt}} by routecompare {{.Metadata.ToolVersion}}</div></div>{{if or .Summary.Added .Summary.Removed .Summary.Modified}}<div class="status">Changes detected</div>{{else}}<div class="status pass">No changes</div>{{end}}</header>
+<header><div><h1>Route comparison report</h1><div class="muted">Generated {{.Metadata.GeneratedAt}} by routecompare {{.Metadata.ToolVersion}}</div></div>{{if .Policy}}{{if .Policy.Passed}}<div class="status pass">Policy passed</div>{{else}}<div class="status">Policy failed</div>{{end}}{{else}}{{if or .Summary.Added .Summary.Removed .Summary.Modified}}<div class="status">Changes detected</div>{{else}}<div class="status pass">No changes</div>{{end}}{{end}}</header>
 {{if or .Metadata.Device .Metadata.ChangeID}}<div class="meta">{{if .Metadata.Device}}<div><div class="label">Device</div><strong>{{.Metadata.Device}}</strong></div>{{end}}{{if .Metadata.ChangeID}}<div><div class="label">Change ID</div><strong>{{.Metadata.ChangeID}}</strong></div>{{end}}</div>{{end}}
-<div class="meta"><div><div class="label">Tables</div>{{filter .Filters.Tables}}</div><div><div class="label">Protocols</div>{{filter .Filters.Protocols}}</div><div><div class="label">Prefixes</div>{{filter .Filters.Prefixes}}</div><div><div class="label">Displayed changes</div>{{filter .Filters.ChangeTypes}}</div></div>
+<div class="meta"><div><div class="label">Tables</div>{{filter .Filters.Tables}}</div><div><div class="label">Protocols</div>{{filter .Filters.Protocols}}</div><div><div class="label">Prefixes</div>{{filter .Filters.Prefixes}}</div><div><div class="label">Displayed changes</div>{{filter .Filters.ChangeTypes}}</div><div><div class="label">Ignored fields</div>{{filter .Filters.IgnoreFields}}</div></div>
+{{if .Policy}}<div class="section"><div class="label">Policy: {{.Policy.Name}}</div>{{if .Policy.Passed}}<strong class="added">All policy checks passed</strong>{{else}}{{range .Policy.Violations}}<div class="removed">⚠ {{.}}</div>{{end}}{{end}}</div>{{end}}
 <div class="inputs"><div class="input"><div class="label">Before snapshot</div><strong>{{.Before.Path}}</strong><br><code>{{.Before.SHA256}}</code></div><div class="input"><div class="label">After snapshot</div><strong>{{.After.Path}}</strong><br><code>{{.After.SHA256}}</code></div></div>
 <div class="cards"><div class="card"><div class="number">{{.Summary.Before}}</div><div class="label">Before</div></div><div class="card"><div class="number">{{.Summary.After}}</div><div class="label">After</div></div><div class="card"><div class="number">{{.Summary.Unchanged}}</div><div class="label">Unchanged</div></div><div class="card"><div class="number added">{{.Summary.Added}}</div><div class="label">Added</div></div><div class="card"><div class="number removed">{{.Summary.Removed}}</div><div class="label">Removed</div></div><div class="card"><div class="number modified">{{.Summary.Modified}}</div><div class="label">Modified</div></div></div>
-<h2>Added routes ({{len .Added}})</h2><div class="section"><table><thead><tr><th>Destination</th><th>Table</th><th>Protocol</th><th>Preference</th><th>Next hops</th></tr></thead><tbody>{{range .Added}}<tr><td><code>{{.Destination}}</code></td><td>{{.Table}}</td><td>{{.Protocol}}</td><td>{{.Preference}}</td><td>{{hops .NextHops}}</td></tr>{{else}}<tr><td colspan="5" class="muted">No displayed routes</td></tr>{{end}}</tbody></table></div>
-<h2>Removed routes ({{len .Removed}})</h2><div class="section"><table><thead><tr><th>Destination</th><th>Table</th><th>Protocol</th><th>Preference</th><th>Next hops</th></tr></thead><tbody>{{range .Removed}}<tr><td><code>{{.Destination}}</code></td><td>{{.Table}}</td><td>{{.Protocol}}</td><td>{{.Preference}}</td><td>{{hops .NextHops}}</td></tr>{{else}}<tr><td colspan="5" class="muted">No displayed routes</td></tr>{{end}}</tbody></table></div>
-<h2>Modified routes ({{len .Modified}})</h2>{{range .Modified}}<div class="section change"><strong><code>{{.Before.Destination}}</code></strong> · {{.Before.Table}}<div class="muted">Changed: {{join .ChangedFields}}</div><table><thead><tr><th></th><th>Protocol</th><th>Preference</th><th>Next hops</th></tr></thead><tbody><tr class="before"><td>Before</td><td>{{.Before.Protocol}}</td><td>{{.Before.Preference}}</td><td>{{hops .Before.NextHops}}</td></tr><tr class="after"><td>After</td><td>{{.After.Protocol}}</td><td>{{.After.Preference}}</td><td>{{hops .After.NextHops}}</td></tr></tbody></table></div>{{else}}<div class="section muted">No displayed routes</div>{{end}}
+<h2>Added routes ({{len .Added}})</h2><div class="section"><table><thead><tr><th>Destination</th><th>Table</th><th>Protocol</th><th>Preference</th><th>Type</th><th>Next hops</th></tr></thead><tbody>{{range .Added}}<tr><td><code>{{.Destination}}</code></td><td>{{.Table}}</td><td>{{.Protocol}}</td><td>{{.Preference}}</td><td>{{.NextHopType}}</td><td>{{hops .NextHops}}</td></tr>{{else}}<tr><td colspan="6" class="muted">No displayed routes</td></tr>{{end}}</tbody></table></div>
+<h2>Removed routes ({{len .Removed}})</h2><div class="section"><table><thead><tr><th>Destination</th><th>Table</th><th>Protocol</th><th>Preference</th><th>Type</th><th>Next hops</th></tr></thead><tbody>{{range .Removed}}<tr><td><code>{{.Destination}}</code></td><td>{{.Table}}</td><td>{{.Protocol}}</td><td>{{.Preference}}</td><td>{{.NextHopType}}</td><td>{{hops .NextHops}}</td></tr>{{else}}<tr><td colspan="6" class="muted">No displayed routes</td></tr>{{end}}</tbody></table></div>
+<h2>Modified routes ({{len .Modified}})</h2>{{range .Modified}}<div class="section change"><strong><code>{{.Before.Destination}}</code></strong> · {{.Before.Table}}<div class="muted">Changed: {{join .ChangedFields}}</div><table><thead><tr><th></th><th>Protocol</th><th>Preference</th><th>Type</th><th>Next hops</th></tr></thead><tbody><tr class="before"><td>Before</td><td>{{.Before.Protocol}}</td><td>{{.Before.Preference}}</td><td>{{.Before.NextHopType}}</td><td>{{hops .Before.NextHops}}</td></tr><tr class="after"><td>After</td><td>{{.After.Protocol}}</td><td>{{.After.Preference}}</td><td>{{.After.NextHopType}}</td><td>{{hops .After.NextHops}}</td></tr></tbody></table></div>{{else}}<div class="section muted">No displayed routes</div>{{end}}
 </main></body></html>`))
 
 func renderHTML(w io.Writer, result report) error {
