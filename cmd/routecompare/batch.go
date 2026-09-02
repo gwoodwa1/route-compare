@@ -18,17 +18,17 @@ type batchManifest struct {
 }
 
 type batchComparison struct {
-	Name       string   `json:"name"`
-	Pre        string   `json:"pre"`
-	Post       string   `json:"post"`
-	Device     string   `json:"device"`
-	ChangeID   string   `json:"change_id"`
-	Tables     []string `json:"tables"`
-	Protocols  []string `json:"protocols"`
-	Prefixes   []string `json:"prefixes"`
-	ChangeTypes []string `json:"change_types"`
+	Name         string   `json:"name"`
+	Pre          string   `json:"pre"`
+	Post         string   `json:"post"`
+	Device       string   `json:"device"`
+	ChangeID     string   `json:"change_id"`
+	Tables       []string `json:"tables"`
+	Protocols    []string `json:"protocols"`
+	Prefixes     []string `json:"prefixes"`
+	ChangeTypes  []string `json:"change_types"`
 	IgnoreFields []string `json:"ignore_fields"`
-	Policy     string   `json:"policy"`
+	Policy       string   `json:"policy"`
 }
 
 type batchReport struct {

@@ -1,0 +1,19 @@
+{
+  "comparisons": [
+    {
+      "name": "edge-small",
+      "pre": "fixtures/pre_1.xml",
+      "post": "fixtures/post_1.xml",
+      "device": "edge-01",
+      "change_id": "CHG-123"
+    },
+    {
+      "name": "edge-mixed",
+      "pre": "fixtures/pre_2.xml",
+      "post": "fixtures/post_2.xml",
+      "device": "edge-02",
+      "change_id": "CHG-123",
+      "policy": "policies/maintenance.json"
+    }
+  ]
+}

@@ -227,3 +227,34 @@ func TestRunUsesPolicyAndReturnsDifferenceError(t *testing.T) {
 		t.Fatalf("unexpected policy report: %#v", result.Policy)
 	}
 }
+
+func TestRunBatchJSONAndJUnit(t *testing.T) {
+	var jsonOutput, stderr bytes.Buffer
+	err := run([]string{
+		"-batch", "../../testdata/batch.json",
+		"-format", "json",
+	}, &jsonOutput, &stderr)
+	var differenceErr differenceFoundError
+	if !errors.As(err, &differenceErr) {
+		t.Fatalf("expected batch difference error, got %v", err)
+	}
+	var batch batchReport
+	if err := json.Unmarshal(jsonOutput.Bytes(), &batch); err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Reports) != 2 || batch.Reports[0].Metadata.Device != "edge-01" || batch.Reports[1].Policy == nil {
+		t.Fatalf("unexpected batch report: %#v", batch)
+	}
+
+	var junitOutput bytes.Buffer
+	err = run([]string{
+		"-batch", "../../testdata/batch.json",
+		"-format", "junit",
+	}, &junitOutput, &stderr)
+	if !errors.As(err, &differenceErr) {
+		t.Fatalf("expected batch difference error, got %v", err)
+	}
+	if !strings.Contains(junitOutput.String(), `tests="2"`) || !strings.Contains(junitOutput.String(), `failures="1"`) {
+		t.Fatalf("unexpected batch JUnit: %s", junitOutput.String())
+	}
+}
