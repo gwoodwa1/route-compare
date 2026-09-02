@@ -17,6 +17,9 @@ import (
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
 		var differenceErr differenceFoundError
 		if errors.As(err, &differenceErr) {
 			os.Exit(2)
