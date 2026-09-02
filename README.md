@@ -136,6 +136,7 @@ Write an HTML report through the non-root container user:
 ```sh
 mkdir -p reports
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$PWD/testdata:/workspace/testdata:ro" \
   -v "$PWD/reports:/workspace/reports" \
   routecompare:1.2.0 \
