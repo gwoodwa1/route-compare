@@ -206,8 +206,8 @@ func markdownEscape(value string) string {
 }
 
 var htmlReportTemplate = template.Must(template.New("report").Funcs(template.FuncMap{
-	"hops": formatNextHops,
-	"join": func(values []string) string { return strings.Join(values, ", ") },
+	"hops":   formatNextHops,
+	"join":   func(values []string) string { return strings.Join(values, ", ") },
 	"filter": displayFilter,
 }).Parse(`<!doctype html>
 <html lang="en">

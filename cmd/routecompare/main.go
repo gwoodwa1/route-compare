@@ -116,11 +116,18 @@ func run(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("create report %q: %w", *output, err)
 		}
-		defer outputFile.Close()
 		reportWriter = outputFile
 	}
 	if err := writeReport(reportWriter, outputFormat, report); err != nil {
+		if outputFile != nil {
+			_ = outputFile.Close()
+		}
 		return err
+	}
+	if outputFile != nil {
+		if err := outputFile.Close(); err != nil {
+			return fmt.Errorf("close report %q: %w", *output, err)
+		}
 	}
 	if matchesFailPolicy(policy, diff) {
 		return differenceFoundError{policy: policy}
