@@ -41,6 +41,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	changeType := flags.String("change-type", "ALL", "display added, removed, modified, or ALL")
 	ignore := flags.String("ignore", "", "comma-separated route fields to ignore during comparison")
 	policyPath := flags.String("policy", "", "JSON comparison policy file")
+	batch := flags.String("batch", "", "JSON manifest containing multiple comparisons")
 	format := flags.String("format", "text", "output format: text, json, markdown, html, or junit")
 	output := flags.String("output", "", "write the report to a file instead of stdout")
 	device := flags.String("device", "", "device name to include in report metadata")
@@ -54,11 +55,25 @@ func run(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, routecompare.Version)
 		return nil
 	}
+	explicit := make(map[string]bool)
+	flags.Visit(func(flag *flag.Flag) { explicit[flag.Name] = true })
+	outputFormat := strings.ToLower(strings.TrimSpace(*format))
+	if !validOutputFormat(outputFormat) {
+		return fmt.Errorf("unsupported format %q (use text, json, markdown, html, or junit)", *format)
+	}
+	policy := strings.ToLower(strings.TrimSpace(*failOn))
+	if !validFailPolicy(policy) {
+		return fmt.Errorf("unsupported fail policy %q (use none, any, added, removed, or modified)", *failOn)
+	}
+	if *batch != "" {
+		if *pre != "" || *post != "" {
+			return fmt.Errorf("-batch cannot be combined with -pre or -post")
+		}
+		return runBatch(*batch, outputFormat, *output, policy, stdout)
+	}
 	if *pre == "" || *post == "" {
 		return fmt.Errorf("both -pre and -post are required")
 	}
-	explicit := make(map[string]bool)
-	flags.Visit(func(flag *flag.Flag) { explicit[flag.Name] = true })
 	var loadedPolicy *comparisonPolicy
 	if *policyPath != "" {
 		var err error
@@ -85,11 +100,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			*failOn = loadedPolicy.FailOn
 		}
 	}
-	outputFormat := strings.ToLower(strings.TrimSpace(*format))
-	if !validOutputFormat(outputFormat) {
-		return fmt.Errorf("unsupported format %q (use text, json, markdown, html, or junit)", *format)
-	}
-	policy := strings.ToLower(strings.TrimSpace(*failOn))
+	policy = strings.ToLower(strings.TrimSpace(*failOn))
 	if !validFailPolicy(policy) {
 		return fmt.Errorf("unsupported fail policy %q (use none, any, added, removed, or modified)", *failOn)
 	}
