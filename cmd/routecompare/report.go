@@ -103,6 +103,9 @@ func renderText(w io.Writer, result report) {
 	if result.Metadata.ChangeID != "" {
 		fmt.Fprintf(w, "Change ID: %s\n", result.Metadata.ChangeID)
 	}
+	if len(result.Filters.Tables)+len(result.Filters.Protocols)+len(result.Filters.Prefixes)+len(result.Filters.ChangeTypes) > 0 {
+		fmt.Fprintf(w, "Filters:   tables=%s protocols=%s prefixes=%s change-types=%s\n", displayFilter(result.Filters.Tables), displayFilter(result.Filters.Protocols), displayFilter(result.Filters.Prefixes), displayFilter(result.Filters.ChangeTypes))
+	}
 	fmt.Fprintln(w, "\nSUMMARY")
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintf(tw, "Routes before\t%d\n", result.Summary.Before)
@@ -165,6 +168,7 @@ func renderMarkdown(w io.Writer, result report) error {
 	if result.Metadata.ChangeID != "" {
 		fmt.Fprintf(w, "**Change ID:** %s  \n", markdownEscape(result.Metadata.ChangeID))
 	}
+	fmt.Fprintf(w, "**Filters:** tables=%s; protocols=%s; prefixes=%s; change types=%s  \n", markdownEscape(displayFilter(result.Filters.Tables)), markdownEscape(displayFilter(result.Filters.Protocols)), markdownEscape(displayFilter(result.Filters.Prefixes)), markdownEscape(displayFilter(result.Filters.ChangeTypes)))
 	fmt.Fprintln(w, "\n## Summary")
 	fmt.Fprintln(w, "\n| Before | After | Unchanged | Added | Removed | Modified |")
 	fmt.Fprintln(w, "| ---: | ---: | ---: | ---: | ---: | ---: |")
@@ -204,6 +208,7 @@ func markdownEscape(value string) string {
 var htmlReportTemplate = template.Must(template.New("report").Funcs(template.FuncMap{
 	"hops": formatNextHops,
 	"join": func(values []string) string { return strings.Join(values, ", ") },
+	"filter": displayFilter,
 }).Parse(`<!doctype html>
 <html lang="en">
 <head>
@@ -217,6 +222,7 @@ var htmlReportTemplate = template.Must(template.New("report").Funcs(template.Fun
 <body><main class="wrap">
 <header><div><h1>Route comparison report</h1><div class="muted">Generated {{.Metadata.GeneratedAt}} by routecompare {{.Metadata.ToolVersion}}</div></div>{{if or .Summary.Added .Summary.Removed .Summary.Modified}}<div class="status">Changes detected</div>{{else}}<div class="status pass">No changes</div>{{end}}</header>
 {{if or .Metadata.Device .Metadata.ChangeID}}<div class="meta">{{if .Metadata.Device}}<div><div class="label">Device</div><strong>{{.Metadata.Device}}</strong></div>{{end}}{{if .Metadata.ChangeID}}<div><div class="label">Change ID</div><strong>{{.Metadata.ChangeID}}</strong></div>{{end}}</div>{{end}}
+<div class="meta"><div><div class="label">Tables</div>{{filter .Filters.Tables}}</div><div><div class="label">Protocols</div>{{filter .Filters.Protocols}}</div><div><div class="label">Prefixes</div>{{filter .Filters.Prefixes}}</div><div><div class="label">Displayed changes</div>{{filter .Filters.ChangeTypes}}</div></div>
 <div class="inputs"><div class="input"><div class="label">Before snapshot</div><strong>{{.Before.Path}}</strong><br><code>{{.Before.SHA256}}</code></div><div class="input"><div class="label">After snapshot</div><strong>{{.After.Path}}</strong><br><code>{{.After.SHA256}}</code></div></div>
 <div class="cards"><div class="card"><div class="number">{{.Summary.Before}}</div><div class="label">Before</div></div><div class="card"><div class="number">{{.Summary.After}}</div><div class="label">After</div></div><div class="card"><div class="number">{{.Summary.Unchanged}}</div><div class="label">Unchanged</div></div><div class="card"><div class="number added">{{.Summary.Added}}</div><div class="label">Added</div></div><div class="card"><div class="number removed">{{.Summary.Removed}}</div><div class="label">Removed</div></div><div class="card"><div class="number modified">{{.Summary.Modified}}</div><div class="label">Modified</div></div></div>
 <h2>Added routes ({{len .Added}})</h2><div class="section"><table><thead><tr><th>Destination</th><th>Table</th><th>Protocol</th><th>Preference</th><th>Next hops</th></tr></thead><tbody>{{range .Added}}<tr><td><code>{{.Destination}}</code></td><td>{{.Table}}</td><td>{{.Protocol}}</td><td>{{.Preference}}</td><td>{{hops .NextHops}}</td></tr>{{else}}<tr><td colspan="5" class="muted">No displayed routes</td></tr>{{end}}</tbody></table></div>
@@ -237,4 +243,11 @@ func formatNextHops(nextHops []routecompare.NextHop) string {
 		hops[i] = strings.Trim(strings.Join([]string{hop.To, hop.Via, hop.LocalInterface}, " "), " ")
 	}
 	return strings.Join(hops, ", ")
+}
+
+func displayFilter(values []string) string {
+	if len(values) == 0 {
+		return "All"
+	}
+	return strings.Join(values, ", ")
 }
