@@ -156,7 +156,7 @@ func writeBatchReport(w io.Writer, format string, result batchReport) error {
 	case "markdown":
 		fmt.Fprintln(w, "# Batch route comparison report")
 		for _, report := range result.Reports {
-			fmt.Fprintln(w, "\n---\n")
+			fmt.Fprintln(w, "\n---")
 			renderMarkdown(w, report)
 		}
 		return nil
