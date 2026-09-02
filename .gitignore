@@ -1,3 +1,5 @@
 /.gocache/
+/dist/
+/sbom.cdx.json
 /routecompare
 *.out
