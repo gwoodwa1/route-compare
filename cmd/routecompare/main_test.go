@@ -49,7 +49,7 @@ func TestRenderJSON(t *testing.T) {
 			ChangedFields: []string{"preference"},
 		}},
 	}
-	report := buildReport(
+	result := buildReport(
 		reportMetadata{GeneratedAt: "2026-09-02T12:00:00Z", ToolVersion: routecompare.Version},
 		inputMetadata{Path: "before.xml", SHA256: strings.Repeat("a", 64)},
 		inputMetadata{Path: "after.xml", SHA256: strings.Repeat("b", 64)},
@@ -57,7 +57,7 @@ func TestRenderJSON(t *testing.T) {
 		diff,
 	)
 	var output bytes.Buffer
-	if err := renderJSON(&output, report); err != nil {
+	if err := renderJSON(&output, result); err != nil {
 		t.Fatal(err)
 	}
 	var decoded report
@@ -113,7 +113,7 @@ func TestMarkdownAndHTMLReports(t *testing.T) {
 		AfterCount:  1,
 		Added:       []routecompare.Route{{Destination: "192.0.2.0/24", Table: "blue.inet.0", Protocol: "BGP"}},
 	}
-	report := buildReport(
+	result := buildReport(
 		reportMetadata{GeneratedAt: "2026-09-02T12:00:00Z", ToolVersion: routecompare.Version, Device: "edge-01", ChangeID: "CHG-123"},
 		inputMetadata{Path: "before.xml", SHA256: strings.Repeat("a", 64)},
 		inputMetadata{Path: "after.xml", SHA256: strings.Repeat("b", 64)},
@@ -121,14 +121,14 @@ func TestMarkdownAndHTMLReports(t *testing.T) {
 		diff,
 	)
 	var markdown bytes.Buffer
-	if err := renderMarkdown(&markdown, report); err != nil {
+	if err := renderMarkdown(&markdown, result); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(markdown.String(), "# Route comparison report") || !strings.Contains(markdown.String(), "CHG-123") {
 		t.Fatalf("unexpected Markdown report: %s", markdown.String())
 	}
 	var html bytes.Buffer
-	if err := renderHTML(&html, report); err != nil {
+	if err := renderHTML(&html, result); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(html.String(), "<!doctype html>") || !strings.Contains(html.String(), "edge-01") || !strings.Contains(html.String(), "192.0.2.0/24") {
