@@ -1,14 +1,16 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"strings"
-	"text/tabwriter"
+	"time"
 
 	routecompare "github.com/gwoodwa1/route-compare"
 )
@@ -34,7 +36,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	pre := flags.String("pre", "", "pre-change Junos XML file")
 	post := flags.String("post", "", "post-change Junos XML file")
 	vrf := flags.String("vrf", "ALL", "comma-separated routing tables, or ALL")
-	format := flags.String("format", "text", "output format: text or json")
+	protocol := flags.String("protocol", "ALL", "comma-separated protocols, or ALL")
+	prefix := flags.String("prefix", "ALL", "comma-separated covering IP prefixes, or ALL")
+	changeType := flags.String("change-type", "ALL", "display added, removed, modified, or ALL")
+	format := flags.String("format", "text", "output format: text, json, markdown, or html")
+	output := flags.String("output", "", "write the report to a file instead of stdout")
+	device := flags.String("device", "", "device name to include in report metadata")
+	changeID := flags.String("change-id", "", "change or ticket identifier for report metadata")
 	failOn := flags.String("fail-on", "none", "return exit code 2 on: none, any, added, removed, or modified")
 	version := flags.Bool("version", false, "print version and exit")
 	if err := flags.Parse(args); err != nil {
@@ -48,35 +56,114 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("both -pre and -post are required")
 	}
 	outputFormat := strings.ToLower(strings.TrimSpace(*format))
-	if outputFormat != "text" && outputFormat != "json" {
-		return fmt.Errorf("unsupported format %q (use text or json)", *format)
+	if !validOutputFormat(outputFormat) {
+		return fmt.Errorf("unsupported format %q (use text, json, markdown, or html)", *format)
 	}
 	policy := strings.ToLower(strings.TrimSpace(*failOn))
 	if !validFailPolicy(policy) {
 		return fmt.Errorf("unsupported fail policy %q (use none, any, added, removed, or modified)", *failOn)
 	}
 
-	before, err := routecompare.ParseFile(*pre)
+	changeTypes := splitList(*changeType, true)
+	if err := validateChangeTypes(changeTypes); err != nil {
+		return err
+	}
+	prefixes, prefixNames, err := parsePrefixes(*prefix)
 	if err != nil {
 		return err
 	}
-	after, err := routecompare.ParseFile(*post)
+
+	before, beforeInput, err := loadSnapshot(*pre)
+	if err != nil {
+		return err
+	}
+	after, afterInput, err := loadSnapshot(*post)
 	if err != nil {
 		return err
 	}
 	tables := splitTables(*vrf)
-	diff := (routecompare.Comparator{}).Compare(before.Routes(tables...), after.Routes(tables...))
-	if outputFormat == "json" {
-		if err := renderJSON(stdout, *pre, *post, diff); err != nil {
-			return err
+	if missing := before.MissingTables(tables...); len(missing) > 0 {
+		return fmt.Errorf("routing table(s) not found in pre-change snapshot: %s", strings.Join(missing, ", "))
+	}
+	if missing := after.MissingTables(tables...); len(missing) > 0 {
+		return fmt.Errorf("routing table(s) not found in post-change snapshot: %s", strings.Join(missing, ", "))
+	}
+	protocols := splitList(*protocol, false)
+	beforeRoutes := filterRoutes(before.Routes(tables...), protocols, prefixes)
+	afterRoutes := filterRoutes(after.Routes(tables...), protocols, prefixes)
+	diff := (routecompare.Comparator{}).Compare(beforeRoutes, afterRoutes)
+	report := buildReport(
+		reportMetadata{
+			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+			ToolVersion: routecompare.Version,
+			Device:      strings.TrimSpace(*device),
+			ChangeID:    strings.TrimSpace(*changeID),
+		},
+		beforeInput,
+		afterInput,
+		reportFilters{
+			Tables:      nonNilStrings(tables),
+			Protocols:   nonNilStrings(protocols),
+			Prefixes:    nonNilStrings(prefixNames),
+			ChangeTypes: nonNilStrings(changeTypes),
+		},
+		diff,
+	)
+	reportWriter := stdout
+	var outputFile *os.File
+	if *output != "" {
+		outputFile, err = os.Create(*output)
+		if err != nil {
+			return fmt.Errorf("create report %q: %w", *output, err)
 		}
-	} else {
-		renderText(stdout, *pre, *post, diff)
+		defer outputFile.Close()
+		reportWriter = outputFile
+	}
+	if err := writeReport(reportWriter, outputFormat, report); err != nil {
+		return err
 	}
 	if matchesFailPolicy(policy, diff) {
 		return differenceFoundError{policy: policy}
 	}
 	return nil
+}
+
+func validOutputFormat(format string) bool {
+	switch format {
+	case "text", "json", "markdown", "html":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeReport(w io.Writer, format string, report report) error {
+	switch format {
+	case "text":
+		renderText(w, report)
+		return nil
+	case "json":
+		return renderJSON(w, report)
+	case "markdown":
+		return renderMarkdown(w, report)
+	case "html":
+		return renderHTML(w, report)
+	default:
+		return fmt.Errorf("unsupported format %q", format)
+	}
+}
+
+func loadSnapshot(path string) (*routecompare.Snapshot, inputMetadata, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, inputMetadata{}, fmt.Errorf("read route snapshot %q: %w", path, err)
+	}
+	snapshot, err := routecompare.Parse(bytes.NewReader(data))
+	if err != nil {
+		return nil, inputMetadata{}, fmt.Errorf("%s: %w", path, err)
+	}
+	hash := sha256.Sum256(data)
+	return snapshot, inputMetadata{Path: path, SHA256: fmt.Sprintf("%x", hash)}, nil
 }
 
 func validFailPolicy(policy string) bool {
@@ -104,120 +191,95 @@ func matchesFailPolicy(policy string, diff routecompare.Difference) bool {
 }
 
 func splitTables(value string) []string {
-	if strings.EqualFold(strings.TrimSpace(value), "ALL") {
+	return splitList(value, false)
+}
+
+func splitList(value string, lower bool) []string {
+	if strings.EqualFold(strings.TrimSpace(value), "ALL") || strings.TrimSpace(value) == "" {
 		return nil
 	}
 	parts := strings.Split(value, ",")
-	tables := parts[:0]
+	values := parts[:0]
+	seen := make(map[string]struct{})
 	for _, part := range parts {
-		if table := strings.TrimSpace(part); table != "" {
-			tables = append(tables, table)
+		value := strings.TrimSpace(part)
+		if lower {
+			value = strings.ToLower(value)
 		}
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		values = append(values, value)
 	}
-	return tables
+	return values
 }
 
-func renderText(w io.Writer, pre, post string, diff routecompare.Difference) {
-	fmt.Fprintln(w, "ROUTE COMPARISON")
-	fmt.Fprintf(w, "Before: %s\n", pre)
-	fmt.Fprintf(w, "After:  %s\n", post)
-	fmt.Fprintln(w, "\nSUMMARY")
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(tw, "Routes before\t%d\n", diff.BeforeCount)
-	fmt.Fprintf(tw, "Routes after\t%d\n", diff.AfterCount)
-	fmt.Fprintf(tw, "Unchanged\t%d\n", diff.UnchangedCount)
-	fmt.Fprintf(tw, "Added\t%d\n", len(diff.Added))
-	fmt.Fprintf(tw, "Removed\t%d\n", len(diff.Removed))
-	fmt.Fprintf(tw, "Modified\t%d\n", len(diff.Modified))
-	_ = tw.Flush()
-
-	renderRoutes(w, "ADDED", diff.Added)
-	renderRoutes(w, "REMOVED", diff.Removed)
-	renderModified(w, diff.Modified)
-}
-
-func renderRoutes(w io.Writer, title string, routes []routecompare.Route) {
-	fmt.Fprintf(w, "\n%s (%d)\n", title, len(routes))
-	if len(routes) == 0 {
-		return
-	}
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "DESTINATION\tNEXT HOPS\tPROTOCOL\tPREFERENCE\tTABLE")
-	for _, route := range routes {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", route.Destination, formatNextHops(route.NextHops), route.Protocol, route.Preference, route.Table)
-	}
-	_ = tw.Flush()
-}
-
-func renderModified(w io.Writer, changes []routecompare.RouteChange) {
-	fmt.Fprintf(w, "\nMODIFIED (%d)\n", len(changes))
-	for _, change := range changes {
-		fmt.Fprintf(w, "%s  %s  %s\n", change.Before.Destination, change.Before.Table, strings.Join(change.ChangedFields, ", "))
-		fmt.Fprintf(w, "  before: protocol=%s preference=%s next-hops=%s\n", change.Before.Protocol, change.Before.Preference, formatNextHops(change.Before.NextHops))
-		fmt.Fprintf(w, "  after:  protocol=%s preference=%s next-hops=%s\n", change.After.Protocol, change.After.Preference, formatNextHops(change.After.NextHops))
-	}
-}
-
-func formatNextHops(nextHops []routecompare.NextHop) string {
-	hops := make([]string, len(nextHops))
-	for i, hop := range nextHops {
-		hops[i] = strings.Trim(strings.Join([]string{hop.To, hop.Via, hop.LocalInterface}, " "), " ")
-	}
-	return strings.Join(hops, ", ")
-}
-
-type jsonReport struct {
-	Before   string                     `json:"before"`
-	After    string                     `json:"after"`
-	Summary  jsonSummary                `json:"summary"`
-	Added    []routecompare.Route       `json:"added"`
-	Removed  []routecompare.Route       `json:"removed"`
-	Modified []routecompare.RouteChange `json:"modified"`
-}
-
-type jsonSummary struct {
-	Before    int `json:"before"`
-	After     int `json:"after"`
-	Unchanged int `json:"unchanged"`
-	Added     int `json:"added"`
-	Removed   int `json:"removed"`
-	Modified  int `json:"modified"`
-}
-
-func renderJSON(w io.Writer, pre, post string, diff routecompare.Difference) error {
-	report := jsonReport{
-		Before: pre,
-		After:  post,
-		Summary: jsonSummary{
-			Before:    diff.BeforeCount,
-			After:     diff.AfterCount,
-			Unchanged: diff.UnchangedCount,
-			Added:     len(diff.Added),
-			Removed:   len(diff.Removed),
-			Modified:  len(diff.Modified),
-		},
-		Added:    nonNilRoutes(diff.Added),
-		Removed:  nonNilRoutes(diff.Removed),
-		Modified: nonNilChanges(diff.Modified),
-	}
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(report); err != nil {
-		return fmt.Errorf("write JSON report: %w", err)
+func validateChangeTypes(changeTypes []string) error {
+	for _, changeType := range changeTypes {
+		switch changeType {
+		case "added", "removed", "modified":
+		default:
+			return fmt.Errorf("unsupported change type %q (use added, removed, modified, or ALL)", changeType)
+		}
 	}
 	return nil
 }
 
-func nonNilRoutes(routes []routecompare.Route) []routecompare.Route {
-	if routes == nil {
-		return []routecompare.Route{}
+func parsePrefixes(value string) ([]netip.Prefix, []string, error) {
+	names := splitList(value, false)
+	prefixes := make([]netip.Prefix, len(names))
+	for i, name := range names {
+		prefix, err := netip.ParsePrefix(name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid prefix %q: %w", name, err)
+		}
+		prefixes[i] = prefix.Masked()
+		names[i] = prefixes[i].String()
 	}
-	return routes
+	return prefixes, names, nil
 }
 
-func nonNilChanges(changes []routecompare.RouteChange) []routecompare.RouteChange {
-	if changes == nil {
-		return []routecompare.RouteChange{}
+func filterRoutes(routes []routecompare.Route, protocols []string, prefixes []netip.Prefix) []routecompare.Route {
+	protocolSet := make(map[string]struct{}, len(protocols))
+	for _, protocol := range protocols {
+		protocolSet[strings.ToLower(protocol)] = struct{}{}
 	}
-	return changes
+	filtered := make([]routecompare.Route, 0, len(routes))
+	for _, route := range routes {
+		if len(protocolSet) > 0 {
+			if _, ok := protocolSet[strings.ToLower(route.Protocol)]; !ok {
+				continue
+			}
+		}
+		if len(prefixes) > 0 && !matchesPrefix(route.Destination, prefixes) {
+			continue
+		}
+		filtered = append(filtered, route)
+	}
+	return filtered
+}
+
+func matchesPrefix(destination string, filters []netip.Prefix) bool {
+	routePrefix, err := netip.ParsePrefix(destination)
+	if err != nil {
+		return false
+	}
+	for _, filter := range filters {
+		if filter.Addr().BitLen() == routePrefix.Addr().BitLen() && filter.Bits() <= routePrefix.Bits() && filter.Contains(routePrefix.Addr()) {
+			return true
+		}
+	}
+	return false
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }
