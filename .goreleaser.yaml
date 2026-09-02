@@ -1,0 +1,53 @@
+version: 2
+
+project_name: route-compare
+
+before:
+  hooks:
+    - go mod tidy
+    - go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.9.0 mod -json -output sbom.cdx.json
+
+builds:
+  - id: routecompare
+    main: ./cmd/routecompare
+    binary: routecompare
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: route-compare
+    ids:
+      - routecompare
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - sbom.cdx.json
+      - testdata/batch.json
+      - testdata/policies/*.json
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true
+
+release:
+  prerelease: auto
+  header: |
+    Route Compare v{{ .Version }}
+
+    See `CHANGELOG.md` for highlights and the included policy and batch examples for complete starting points.
+

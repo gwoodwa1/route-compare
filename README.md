@@ -1,5 +1,8 @@
 # route-compare
 
+[![Test](https://github.com/gwoodwa1/route-compare/actions/workflows/test.yml/badge.svg)](https://github.com/gwoodwa1/route-compare/actions/workflows/test.yml)
+[![CodeQL](https://github.com/gwoodwa1/route-compare/actions/workflows/codeql.yml/badge.svg)](https://github.com/gwoodwa1/route-compare/actions/workflows/codeql.yml)
+
 `route-compare` is a Go library and command-line tool for comparing Junos route-table snapshots exported with `show route | display xml`. It classifies added, removed, and modified routes and produces terminal, JSON, Markdown, or self-contained HTML reports.
 
 ## Release
@@ -171,6 +174,24 @@ func main() {
 go test ./...
 go vet ./...
 ```
+
+## Automation and releases
+
+GitHub Actions provides:
+
+- Tests, vet, race detection, coverage, parser fuzzing, CLI smoke tests,
+  `govulncheck`, `gosec`, and compiled-binary vulnerability scanning.
+- CodeQL scanning on pushes, pull requests, and a weekly schedule.
+- Tag-driven GoReleaser builds for Linux, macOS, and Windows on amd64 and
+  arm64, with checksums and a CycloneDX SBOM.
+- Draft-first releases whose binaries are scanned before publication.
+- Weekly grouped Dependabot updates for Go modules and GitHub Actions.
+
+The release workflow requires the tag, library version, and CLI version to
+match. After updating `Version` and `CHANGELOG.md`, create and push a semantic
+version tag such as `v1.2.0`. The workflow tests and scans the project, creates
+a draft GitHub release, verifies every binary, and publishes only after all
+checks pass.
 
 The package keeps XML decoding, route projection, comparison, and CLI presentation separate. Exported values are safe for callers to retain and modify without changing a parsed snapshot.
 

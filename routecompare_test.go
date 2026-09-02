@@ -188,3 +188,16 @@ func TestFixtureComparisons(t *testing.T) {
 		})
 	}
 }
+
+func FuzzParse(f *testing.F) {
+	f.Add([]byte(`<rpc-reply><route-information><route-table><table-name>inet.0</table-name><rt><rt-destination>192.0.2.0/24</rt-destination><rt-entry><protocol-name>Static</protocol-name><preference>5</preference><nh><to>192.0.2.1</to></nh></rt-entry></rt></route-table></route-information></rpc-reply>`))
+	f.Add([]byte(`<rpc-reply>`))
+	f.Fuzz(func(t *testing.T, input []byte) {
+		snapshot, err := routecompare.Parse(strings.NewReader(string(input)))
+		if err != nil {
+			return
+		}
+		_ = snapshot.TableNames()
+		_ = snapshot.Routes()
+	})
+}

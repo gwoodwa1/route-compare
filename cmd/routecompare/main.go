@@ -15,6 +15,10 @@ import (
 	routecompare "github.com/gwoodwa1/route-compare"
 )
 
+// version is overridden by release builds. Local builds use the library
+// version so package and CLI development stay in sync.
+var version = routecompare.Version
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -50,12 +54,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 	device := flags.String("device", "", "device name to include in report metadata")
 	changeID := flags.String("change-id", "", "change or ticket identifier for report metadata")
 	failOn := flags.String("fail-on", "none", "return exit code 2 on: none, any, added, removed, or modified")
-	version := flags.Bool("version", false, "print version and exit")
+	showVersion := flags.Bool("version", false, "print version and exit")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *version {
-		fmt.Fprintln(stdout, routecompare.Version)
+	if *showVersion {
+		fmt.Fprintln(stdout, version)
 		return nil
 	}
 	explicit := make(map[string]bool)
@@ -147,7 +151,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	report := buildReport(
 		reportMetadata{
 			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-			ToolVersion: routecompare.Version,
+			ToolVersion: version,
 			Device:      strings.TrimSpace(*device),
 			ChangeID:    strings.TrimSpace(*changeID),
 		},
