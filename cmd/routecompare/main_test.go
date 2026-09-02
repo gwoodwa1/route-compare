@@ -48,16 +48,26 @@ func TestRenderJSON(t *testing.T) {
 			ChangedFields: []string{"preference"},
 		}},
 	}
+	report := buildReport(
+		reportMetadata{GeneratedAt: "2026-09-02T12:00:00Z", ToolVersion: routecompare.Version},
+		inputMetadata{Path: "before.xml", SHA256: strings.Repeat("a", 64)},
+		inputMetadata{Path: "after.xml", SHA256: strings.Repeat("b", 64)},
+		reportFilters{},
+		diff,
+	)
 	var output bytes.Buffer
-	if err := renderJSON(&output, "before.xml", "after.xml", diff); err != nil {
+	if err := renderJSON(&output, report); err != nil {
 		t.Fatal(err)
 	}
-	var report jsonReport
-	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+	var decoded report
+	if err := json.Unmarshal(output.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if report.Summary.Modified != 1 || len(report.Modified) != 1 || report.Added == nil || report.Removed == nil {
-		t.Fatalf("unexpected report: %#v", report)
+	if decoded.Summary.Modified != 1 || len(decoded.Modified) != 1 || decoded.Added == nil || decoded.Removed == nil {
+		t.Fatalf("unexpected report: %#v", decoded)
+	}
+	if decoded.Before.Path != "before.xml" || len(decoded.Before.SHA256) != 64 || decoded.Metadata.ToolVersion != routecompare.Version {
+		t.Fatalf("unexpected metadata: %#v", decoded)
 	}
 }
 
@@ -74,5 +84,86 @@ func TestFailPolicies(t *testing.T) {
 	}
 	if validFailPolicy("surprise") {
 		t.Fatal("unexpected valid fail policy")
+	}
+}
+
+func TestFilterRoutes(t *testing.T) {
+	prefixes, _, err := parsePrefixes("10.0.0.0/8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := []routecompare.Route{
+		{Destination: "10.20.0.0/16", Protocol: "BGP"},
+		{Destination: "10.30.0.0/16", Protocol: "OSPF"},
+		{Destination: "192.0.2.0/24", Protocol: "BGP"},
+	}
+	got := filterRoutes(routes, []string{"bgp"}, prefixes)
+	if len(got) != 1 || got[0].Destination != "10.20.0.0/16" {
+		t.Fatalf("unexpected filtered routes: %#v", got)
+	}
+	if _, _, err := parsePrefixes("not-a-prefix"); err == nil {
+		t.Fatal("expected invalid prefix error")
+	}
+}
+
+func TestMarkdownAndHTMLReports(t *testing.T) {
+	diff := routecompare.Difference{
+		BeforeCount: 1,
+		AfterCount:  1,
+		Added:       []routecompare.Route{{Destination: "192.0.2.0/24", Table: "blue.inet.0", Protocol: "BGP"}},
+	}
+	report := buildReport(
+		reportMetadata{GeneratedAt: "2026-09-02T12:00:00Z", ToolVersion: routecompare.Version, Device: "edge-01", ChangeID: "CHG-123"},
+		inputMetadata{Path: "before.xml", SHA256: strings.Repeat("a", 64)},
+		inputMetadata{Path: "after.xml", SHA256: strings.Repeat("b", 64)},
+		reportFilters{},
+		diff,
+	)
+	var markdown bytes.Buffer
+	if err := renderMarkdown(&markdown, report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(markdown.String(), "# Route comparison report") || !strings.Contains(markdown.String(), "CHG-123") {
+		t.Fatalf("unexpected Markdown report: %s", markdown.String())
+	}
+	var html bytes.Buffer
+	if err := renderHTML(&html, report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html.String(), "<!doctype html>") || !strings.Contains(html.String(), "edge-01") || !strings.Contains(html.String(), "192.0.2.0/24") {
+		t.Fatalf("unexpected HTML report: %s", html.String())
+	}
+}
+
+func TestRunRejectsMissingTable(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{
+		"-pre", "../../testdata/fixtures/pre_1.xml",
+		"-post", "../../testdata/fixtures/post_1.xml",
+		"-vrf", "missing.inet.0",
+	}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunWritesMarkdownFile(t *testing.T) {
+	path := t.TempDir() + "/report.md"
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{
+		"-pre", "../../testdata/fixtures/pre_1.xml",
+		"-post", "../../testdata/fixtures/post_1.xml",
+		"-format", "markdown",
+		"-output", path,
+		"-device", "edge-01",
+	}, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stdout.Len() != 0 || !strings.Contains(string(data), "edge-01") {
+		t.Fatalf("unexpected report output: stdout=%q report=%q", stdout.String(), data)
 	}
 }
