@@ -2,6 +2,12 @@
 
 All notable changes to route-compare are documented here.
 
+## Unreleased
+
+### Security
+
+- Require Go 1.27.2 to include fixes for standard-library vulnerabilities.
+
 ## v1.2.0
 
 ### Added
