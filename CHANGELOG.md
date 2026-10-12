@@ -7,6 +7,7 @@ All notable changes to route-compare are documented here.
 ### Security
 
 - Require Go 1.27.2 to include fixes for standard-library vulnerabilities.
+- Update gosec to a Go 1.27-compatible revision for security analysis.
 
 ## v1.2.0
 
